@@ -1,10 +1,6 @@
 import React from 'react';
 
-interface PageSettingsProps {
-  onLogout: () => void;
-}
-
-export function PageSettings({ onLogout }: PageSettingsProps) {
+export function PageSettings({ onLogout }) {
   return (
     <div className="settings-page">
       <h2>⚙ Settings</h2>

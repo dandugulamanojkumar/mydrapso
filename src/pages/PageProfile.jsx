@@ -1,36 +1,13 @@
 import React, { useState } from 'react';
 
-interface User {
-  id: string;
-  name: string;
-  avatar: string;
-}
-
-interface Video {
-  id: string;
-  url: string;
-  userId: string;
-  updatedName?: string;
-  updatedAvatar?: string;
-}
-
-interface PageProfileProps {
-  profile: User;
-  setProfile: React.Dispatch<React.SetStateAction<User>>;
-  uploads: Video[];
-  setUploads: React.Dispatch<React.SetStateAction<Video[]>>;
-  follows: Record<string, string[]>;
-  likes: string[];
-}
-
-export function PageProfile({ 
-  uploads = [], 
-  profile, 
-  setProfile, 
-  setUploads, 
-  follows, 
-  likes 
-}: PageProfileProps) {
+export function PageProfile({
+  uploads = [],
+  profile,
+  setProfile,
+  setUploads,
+  follows,
+  likes
+}) {
   const followers = follows[profile.id]?.length || 0;
   const following = Object.values(follows).filter((arr) => arr.includes(profile.id)).length;
 
@@ -38,7 +15,7 @@ export function PageProfile({
   const [tempName, setTempName] = useState(profile.name);
   const [tempPic, setTempPic] = useState(profile.avatar);
 
-  const handlePicChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePicChange = (e) => {
     const file = e.target.files?.[0];
     if (file) setTempPic(URL.createObjectURL(file));
   };

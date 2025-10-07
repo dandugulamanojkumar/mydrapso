@@ -1,13 +1,6 @@
 import React from 'react';
 
-interface SidebarProps {
-  sidebarCollapsed: boolean;
-  setSidebarCollapsed: (collapsed: boolean | ((prev: boolean) => boolean)) => void;
-  activePage: string;
-  setActivePage: (page: string) => void;
-}
-
-export function Sidebar({ sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage }: SidebarProps) {
+export function Sidebar({ sidebarCollapsed, setSidebarCollapsed, activePage, setActivePage }) {
   const menuItems = [
     { id: 'home', icon: '🏠', label: 'Home' },
     { id: 'shorts', icon: '🎬', label: 'Clickz' },
@@ -28,7 +21,7 @@ export function Sidebar({ sidebarCollapsed, setSidebarCollapsed, activePage, set
       <nav>
         <ul>
           {menuItems.map((item) => (
-            <li 
+            <li
               key={item.id}
               onClick={() => setActivePage(item.id)}
               className={activePage === item.id ? 'active' : ''}

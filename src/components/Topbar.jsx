@@ -1,12 +1,6 @@
 import React from 'react';
 
-interface TopbarProps {
-  theme: string;
-  setTheme: (theme: string) => void;
-  openModal: () => void;
-}
-
-export function Topbar({ theme, setTheme, openModal }: TopbarProps) {
+export function Topbar({ theme, setTheme, openModal }) {
   return (
     <header className="topbar fixed">
       <h1 className="brand-text">Drapso</h1>

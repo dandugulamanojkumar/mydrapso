@@ -1,29 +1,6 @@
 import React from 'react';
 
-interface UploadModalProps {
-  step: number;
-  setStep: (step: number) => void;
-  setShowModal: (show: boolean) => void;
-  videoMeta: any;
-  onPickFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  fileInputRef: React.RefObject<HTMLInputElement>;
-  title: string;
-  setTitle: (title: string) => void;
-  desc: string;
-  setDesc: (desc: string) => void;
-  showAffiliate: boolean;
-  setShowAffiliate: (show: boolean) => void;
-  affiliateLink: string;
-  setAffiliateLink: (link: string) => void;
-  showLocation: boolean;
-  setShowLocation: (show: boolean) => void;
-  locationText: string;
-  setLocationText: (text: string) => void;
-  canUpload: boolean;
-  submitUpload: (e: React.FormEvent) => void;
-}
-
-export function UploadModal(props: UploadModalProps) {
+export function UploadModal(props) {
   const {
     step, setStep, setShowModal, videoMeta, onPickFile, fileInputRef,
     title, setTitle, desc, setDesc,
@@ -33,7 +10,7 @@ export function UploadModal(props: UploadModalProps) {
   } = props;
 
   return (
-    <div className="modal" onClick={(e) => (e.target as Element).classList.contains("modal") && setShowModal(false)}>
+    <div className="modal" onClick={(e) => e.target.classList.contains("modal") && setShowModal(false)}>
       <div className="modal-content">
         {step > 1 && <button className="back-btn" onClick={() => setStep(1)}>←</button>}
         <span className="close-btn" onClick={() => setShowModal(false)}>×</span>
@@ -61,11 +38,11 @@ export function UploadModal(props: UploadModalProps) {
                 Add Affiliate Link
               </label>
               {showAffiliate && (
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Affiliate link URL"
-                  value={affiliateLink} 
-                  onChange={(e) => setAffiliateLink(e.target.value)} 
+                  value={affiliateLink}
+                  onChange={(e) => setAffiliateLink(e.target.value)}
                 />
               )}
               <label>
@@ -73,11 +50,11 @@ export function UploadModal(props: UploadModalProps) {
                 Add Location
               </label>
               {showLocation && (
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Location"
-                  value={locationText} 
-                  onChange={(e) => setLocationText(e.target.value)} 
+                  value={locationText}
+                  onChange={(e) => setLocationText(e.target.value)}
                 />
               )}
               <button type="submit" className="btn btn-primary" disabled={!canUpload}>Upload</button>

@@ -1,56 +1,23 @@
 import React from 'react';
 
-interface Video {
-  id: string;
-  url: string;
-  name: string;
-  duration: number;
-  title: string;
-  desc: string;
-  hasAffiliate: boolean;
-  affiliateLink?: string;
-  hasLocation: boolean;
-  location?: string;
-  userId: string;
-  likes: number;
-}
-
-interface User {
-  id: string;
-  name: string;
-  avatar: string;
-}
-
-interface VideosFeedProps {
-  uploads: Video[];
-  currentUser: User;
-  likes: string[];
-  setLikes: React.Dispatch<React.SetStateAction<string[]>>;
-  follows: Record<string, string[]>;
-  setFollows: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-  allowDelete?: boolean;
-  setUploads?: React.Dispatch<React.SetStateAction<Video[]>>;
-  onVideoClick?: (videoId: string, allVideos: Video[]) => void;
-}
-
-export function VideosFeed({ 
-  uploads, 
-  currentUser, 
-  likes, 
-  setLikes, 
-  follows, 
-  setFollows, 
-  allowDelete = false, 
+export function VideosFeed({
+  uploads,
+  currentUser,
+  likes,
+  setLikes,
+  follows,
+  setFollows,
+  allowDelete = false,
   setUploads,
   onVideoClick
-}: VideosFeedProps) {
+}) {
   if (!uploads.length) return <p>No videos yet.</p>;
 
-  const toggleLike = (id: string) => {
+  const toggleLike = (id) => {
     setLikes((prev) => prev.includes(id) ? prev.filter((vid) => vid !== id) : [...prev, id]);
   };
 
-  const toggleFollow = (uid: string) => {
+  const toggleFollow = (uid) => {
     setFollows((prev) => {
       const copy = { ...prev };
       if (!copy[uid]) copy[uid] = [];
@@ -63,24 +30,22 @@ export function VideosFeed({
     });
   };
 
-  const deleteVideo = (id: string) => setUploads && setUploads((prev) => prev.filter((v) => v.id !== id));
+  const deleteVideo = (id) => setUploads && setUploads((prev) => prev.filter((v) => v.id !== id));
 
-  const openComments = (videoId: string) => {
-    // TODO: Implement comment section
+  const openComments = (videoId) => {
     alert(`Comments for video ${videoId} - Feature coming soon!`);
   };
 
-  const shareVideo = (video: Video) => {
+  const shareVideo = (video) => {
     const shareData = {
       title: video.title,
       text: video.desc,
       url: window.location.href
     };
-    
+
     if (navigator.share) {
       navigator.share(shareData);
     } else {
-      // Fallback: copy to clipboard
       navigator.clipboard.writeText(window.location.href).then(() => {
         alert('Video link copied to clipboard!');
       }).catch(() => {
@@ -89,17 +54,15 @@ export function VideosFeed({
     }
   };
 
-  const renderActionButtons = (video: Video) => {
+  const renderActionButtons = (video) => {
     const buttons = [];
-    
-    // Always start with Like button
+
     buttons.push(
       <button key="like" className="icon-btn" onClick={() => toggleLike(video.id)}>
         {likes.includes(video.id) ? "❤ Liked" : "🤍 Like"}
       </button>
     );
-    
-    // Add Cart button right after Like if affiliate is enabled
+
     if (video.hasAffiliate) {
       buttons.push(
         <button key="cart" className="icon-btn cart-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
@@ -107,34 +70,31 @@ export function VideosFeed({
         </button>
       );
     }
-    
-    // Add Location button after Like (or after Cart if both are enabled)
+
     if (video.hasLocation) {
       buttons.push(
-        <button 
+        <button
           key="location"
-          className="icon-btn location-btn" 
+          className="icon-btn location-btn"
           onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(video.location || '')}`, "_blank")}
         >
           📍 Location
         </button>
       );
     }
-    
-    // Add Comment button
+
     buttons.push(
       <button key="comment" className="icon-btn" onClick={() => openComments(video.id)}>
         💬 Comment
       </button>
     );
-    
-    // Always end with Share button
+
     buttons.push(
       <button key="share" className="icon-btn" onClick={() => shareVideo(video)}>
         🔗 Share
       </button>
     );
-    
+
     return buttons;
   };
 
@@ -143,7 +103,7 @@ export function VideosFeed({
       {uploads.map((v) => (
         <div key={v.id} className="video-card">
           <div className="video-media-wrapper">
-            <video 
+            <video
               controls
               onClick={() => onVideoClick && onVideoClick(v.id, uploads)}
               style={{ cursor: onVideoClick ? 'pointer' : 'default' }}
