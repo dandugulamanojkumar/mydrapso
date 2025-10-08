@@ -15,6 +15,9 @@ export function ShortsPlayer({
   const currentVideo = videos[currentIndex];
 
   useEffect(() => {
+    let touchStartY = 0;
+    let isScrolling = false;
+
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         onClose();
@@ -28,23 +31,58 @@ export function ShortsPlayer({
     };
 
     const handleWheel = (e) => {
+      if (isScrolling) return;
+
       e.preventDefault();
-      if (e.deltaY > 0 && currentIndex < videos.length - 1) {
+      isScrolling = true;
+
+      if (e.deltaY > 50) {
         onNavigate('next');
-      } else if (e.deltaY < 0 && currentIndex > 0) {
+      } else if (e.deltaY < -50) {
         onNavigate('prev');
+      }
+
+      setTimeout(() => {
+        isScrolling = false;
+      }, 500);
+    };
+
+    const handleTouchStart = (e) => {
+      touchStartY = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e) => {
+      if (isScrolling) return;
+
+      const touchEndY = e.changedTouches[0].clientY;
+      const diff = touchStartY - touchEndY;
+
+      if (Math.abs(diff) > 50) {
+        isScrolling = true;
+        if (diff > 0) {
+          onNavigate('next');
+        } else {
+          onNavigate('prev');
+        }
+        setTimeout(() => {
+          isScrolling = false;
+        }, 500);
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     if (containerRef.current) {
-      containerRef.current.addEventListener('wheel', handleWheel);
+      containerRef.current.addEventListener('wheel', handleWheel, { passive: false });
+      containerRef.current.addEventListener('touchstart', handleTouchStart);
+      containerRef.current.addEventListener('touchend', handleTouchEnd);
     }
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
       if (containerRef.current) {
         containerRef.current.removeEventListener('wheel', handleWheel);
+        containerRef.current.removeEventListener('touchstart', handleTouchStart);
+        containerRef.current.removeEventListener('touchend', handleTouchEnd);
       }
     };
   }, [currentIndex, videos.length, onClose, onNavigate]);
@@ -178,19 +216,6 @@ export function ShortsPlayer({
               )}
             </div>
           </div>
-        </div>
-
-        <div className="shorts-navigation">
-          {currentIndex > 0 && (
-            <button className="shorts-nav-btn shorts-nav-up" onClick={() => onNavigate('prev')}>
-              ↑
-            </button>
-          )}
-          {currentIndex < videos.length - 1 && (
-            <button className="shorts-nav-btn shorts-nav-down" onClick={() => onNavigate('next')}>
-              ↓
-            </button>
-          )}
         </div>
 
         <div className="shorts-counter">

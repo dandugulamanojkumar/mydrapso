@@ -4,11 +4,13 @@ import { Sidebar } from "./components/Sidebar";
 import { UploadModal } from "./components/UploadModal";
 import { VideosFeed } from "./components/VideosFeed";
 import { ShortsPlayer } from "./components/ShortsPlayer";
+import { SearchResults } from "./components/SearchResults";
 import { PageProfile } from "./pages/PageProfile";
 import { PageSettings } from "./pages/PageSettings";
 import { PageShorts } from "./pages/PageShorts";
 import { PageNotifications } from "./pages/PageNotifications";
 import { EmptyPage } from "./pages/EmptyPage";
+import { shuffleArray } from "./utils/videoUtils";
 import "./styles.css";
 
 export default function App() {
@@ -42,6 +44,12 @@ export default function App() {
   const [shortsMode, setShortsMode] = useState(false);
   const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
   const [shortsVideos, setShortsVideos] = useState([]);
+  const [videoHistory, setVideoHistory] = useState([]);
+
+  /* ===== SEARCH STATE ===== */
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searchResults, setSearchResults] = useState({ users: [], videos: [] });
+  const [searchQuery, setSearchQuery] = useState("");
 
   /* ===== THEME PERSISTENCE ===== */
   useEffect(() => {
@@ -57,9 +65,11 @@ export default function App() {
 
   /* ===== SHORTS MODE FUNCTIONS ===== */
   const openShortsMode = (videoId, allVideos) => {
-    const videoIndex = allVideos.findIndex(v => v.id === videoId);
-    setShortsVideos(allVideos);
-    setCurrentVideoIndex(videoIndex);
+    const shuffled = shuffleArray(allVideos);
+    const videoIndex = shuffled.findIndex(v => v.id === videoId);
+    setShortsVideos(shuffled);
+    setCurrentVideoIndex(videoIndex >= 0 ? videoIndex : 0);
+    setVideoHistory([shuffled[videoIndex >= 0 ? videoIndex : 0]]);
     setShortsMode(true);
   };
 
@@ -67,14 +77,79 @@ export default function App() {
     setShortsMode(false);
     setShortsVideos([]);
     setCurrentVideoIndex(0);
+    setVideoHistory([]);
   };
 
   const navigateShorts = (direction) => {
-    if (direction === 'next' && currentVideoIndex < shortsVideos.length - 1) {
-      setCurrentVideoIndex(prev => prev + 1);
+    if (direction === 'next') {
+      if (currentVideoIndex < shortsVideos.length - 1) {
+        setCurrentVideoIndex(prev => prev + 1);
+        if (!videoHistory.find(v => v.id === shortsVideos[currentVideoIndex + 1].id)) {
+          setVideoHistory(prev => [...prev, shortsVideos[currentVideoIndex + 1]]);
+        }
+      } else {
+        const availableVideos = uploads.filter(v => !videoHistory.map(h => h.id).includes(v.id));
+        if (availableVideos.length > 0) {
+          const shuffled = shuffleArray(availableVideos);
+          const nextVideo = shuffled[0];
+          setShortsVideos(prev => [...prev, nextVideo]);
+          setVideoHistory(prev => [...prev, nextVideo]);
+          setCurrentVideoIndex(prev => prev + 1);
+        } else {
+          const shuffled = shuffleArray(uploads);
+          const nextVideo = shuffled[0];
+          setShortsVideos(prev => [...prev, nextVideo]);
+          setVideoHistory(prev => [...prev, nextVideo]);
+          setCurrentVideoIndex(prev => prev + 1);
+        }
+      }
     } else if (direction === 'prev' && currentVideoIndex > 0) {
       setCurrentVideoIndex(prev => prev - 1);
     }
+  };
+
+  /* ===== SEARCH FUNCTION ===== */
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    const lowerQuery = query.toLowerCase();
+
+    const matchedVideos = uploads.filter(video =>
+      video.title.toLowerCase().includes(lowerQuery) ||
+      video.desc.toLowerCase().includes(lowerQuery)
+    );
+
+    const allUsers = [profile];
+    const matchedUsers = allUsers.filter(user =>
+      user.name.toLowerCase().includes(lowerQuery) ||
+      user.id.toLowerCase().includes(lowerQuery)
+    );
+
+    setSearchResults({ users: matchedUsers, videos: matchedVideos });
+    setShowSearchResults(true);
+  };
+
+  const handleUserClick = (userId) => {
+    if (userId === profile.id) {
+      setActivePage('profile');
+    }
+  };
+
+  const handleVideoClick = (videoId) => {
+    const allVideos = shuffleArray(uploads);
+    openShortsMode(videoId, allVideos);
+  };
+
+  const toggleFollow = (uid) => {
+    setFollows((prev) => {
+      const copy = { ...prev };
+      if (!copy[uid]) copy[uid] = [];
+      if (copy[uid].includes(profile.id)) {
+        copy[uid] = copy[uid].filter((id) => id !== profile.id);
+      } else {
+        copy[uid].push(profile.id);
+      }
+      return copy;
+    });
   };
 
   /* ===== PAGES ===== */
@@ -82,13 +157,14 @@ export default function App() {
     () => ({
       home: (
         <VideosFeed
-          uploads={uploads}
+          uploads={shuffleArray(uploads)}
           currentUser={profile}
           likes={likes}
           setLikes={setLikes}
           follows={follows}
           setFollows={setFollows}
-          onVideoClick={openShortsMode}
+          onVideoClick={(videoId) => openShortsMode(videoId, uploads)}
+          randomize={true}
         />
       ),
       shorts: <PageShorts uploads={uploads} currentUser={profile} likes={likes} setLikes={setLikes} follows={follows} setFollows={setFollows} />,
@@ -200,6 +276,7 @@ export default function App() {
           setShowModal(true);
           setStep(1);
         }}
+        onSearch={handleSearch}
       />
       <Sidebar
         sidebarCollapsed={sidebarCollapsed}
@@ -221,6 +298,18 @@ export default function App() {
           setFollows={setFollows}
           onClose={closeShortsMode}
           onNavigate={navigateShorts}
+        />
+      )}
+      {showSearchResults && (
+        <SearchResults
+          searchQuery={searchQuery}
+          searchResults={searchResults}
+          onUserClick={handleUserClick}
+          onVideoClick={handleVideoClick}
+          onClose={() => setShowSearchResults(false)}
+          currentUser={profile}
+          follows={follows}
+          toggleFollow={toggleFollow}
         />
       )}
       {showModal && (

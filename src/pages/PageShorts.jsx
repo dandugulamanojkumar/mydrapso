@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { shuffleArray } from '../utils/videoUtils';
 
 export function PageShorts({
   uploads,
@@ -8,6 +9,111 @@ export function PageShorts({
   follows,
   setFollows
 }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [videoHistory, setVideoHistory] = useState([]);
+  const [randomVideos, setRandomVideos] = useState([]);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (uploads.length > 0 && randomVideos.length === 0) {
+      const shuffled = shuffleArray(uploads);
+      setRandomVideos([shuffled[0]]);
+      setVideoHistory([shuffled[0]]);
+    }
+  }, [uploads]);
+
+  const loadNextVideo = () => {
+    const availableVideos = uploads.filter(v => !videoHistory.map(h => h.id).includes(v.id));
+    if (availableVideos.length > 0) {
+      const shuffled = shuffleArray(availableVideos);
+      const nextVideo = shuffled[0];
+      setRandomVideos(prev => [...prev, nextVideo]);
+      setVideoHistory(prev => [...prev, nextVideo]);
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      const shuffled = shuffleArray(uploads);
+      const nextVideo = shuffled[0];
+      setRandomVideos(prev => [...prev, nextVideo]);
+      setVideoHistory(prev => [...prev, nextVideo]);
+      setCurrentIndex(prev => prev + 1);
+    }
+  };
+
+  const goToPrevious = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+    }
+  };
+
+  useEffect(() => {
+    let touchStartY = 0;
+    let isScrolling = false;
+
+    const handleWheel = (e) => {
+      if (isScrolling) return;
+      e.preventDefault();
+      isScrolling = true;
+
+      if (e.deltaY > 50) {
+        loadNextVideo();
+      } else if (e.deltaY < -50) {
+        goToPrevious();
+      }
+
+      setTimeout(() => {
+        isScrolling = false;
+      }, 500);
+    };
+
+    const handleTouchStart = (e) => {
+      touchStartY = e.touches[0].clientY;
+    };
+
+    const handleTouchEnd = (e) => {
+      if (isScrolling) return;
+      const touchEndY = e.changedTouches[0].clientY;
+      const diff = touchStartY - touchEndY;
+
+      if (Math.abs(diff) > 50) {
+        isScrolling = true;
+        if (diff > 0) {
+          loadNextVideo();
+        } else {
+          goToPrevious();
+        }
+        setTimeout(() => {
+          isScrolling = false;
+        }, 500);
+      }
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        loadNextVideo();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        goToPrevious();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    if (containerRef.current) {
+      containerRef.current.addEventListener('wheel', handleWheel, { passive: false });
+      containerRef.current.addEventListener('touchstart', handleTouchStart);
+      containerRef.current.addEventListener('touchend', handleTouchEnd);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      if (containerRef.current) {
+        containerRef.current.removeEventListener('wheel', handleWheel);
+        containerRef.current.removeEventListener('touchstart', handleTouchStart);
+        containerRef.current.removeEventListener('touchend', handleTouchEnd);
+      }
+    };
+  }, [currentIndex, videoHistory, uploads]);
+
   const toggleLike = (id) => {
     setLikes((prev) => prev.includes(id) ? prev.filter((vid) => vid !== id) : [...prev, id]);
   };
@@ -96,7 +202,7 @@ export function PageShorts({
     return buttons;
   };
 
-  if (!uploads.length) {
+  if (!uploads.length || randomVideos.length === 0) {
     return (
       <div style={{ textAlign: 'center', marginTop: '100px' }}>
         <h2>🎬 Clickz</h2>
@@ -105,45 +211,46 @@ export function PageShorts({
     );
   }
 
+  const currentVideo = randomVideos[currentIndex];
+
   return (
-    <div className="clickz-feed">
-      {uploads.map((video) => (
-        <div key={video.id} className="clickz-container">
-          <video
-            className="clickz-video"
-            src={video.url}
-            controls
-            loop
-            muted
-            autoPlay={false}
-          />
+    <div className="clickz-feed-fullscreen" ref={containerRef}>
+      <div className="clickz-container-fullscreen">
+        <video
+          key={currentVideo.id}
+          className="clickz-video-fullscreen"
+          src={currentVideo.url}
+          controls
+          loop
+          autoPlay
+          muted={false}
+        />
 
-          <div className="clickz-actions">
-            {renderActionButtons(video)}
-          </div>
-
-          <div className="clickz-profile">
-            <img src={currentUser.avatar} alt="Profile" />
-            <div>
-              <div className="clickz-username">@{currentUser.name}</div>
-              <div style={{ fontSize: '14px', marginTop: '4px', opacity: 0.8 }}>
-                {video.title}
-              </div>
-              <div style={{ fontSize: '12px', marginTop: '2px', opacity: 0.6 }}>
-                {video.desc}
-              </div>
-            </div>
-            {video.userId !== currentUser.id && (
-              <button
-                className={`follow-btn ${follows[video.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
-                onClick={() => toggleFollow(video.userId)}
-              >
-                {follows[video.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
-              </button>
-            )}
-          </div>
+        <div className="clickz-actions">
+          {renderActionButtons(currentVideo)}
         </div>
-      ))}
+
+        <div className="clickz-profile">
+          <img src={currentUser.avatar} alt="Profile" />
+          <div>
+            <div className="clickz-username">@{currentUser.name}</div>
+            <div style={{ fontSize: '14px', marginTop: '4px', opacity: 0.8 }}>
+              {currentVideo.title}
+            </div>
+            <div style={{ fontSize: '12px', marginTop: '2px', opacity: 0.6 }}>
+              {currentVideo.desc}
+            </div>
+          </div>
+          {currentVideo.userId !== currentUser.id && (
+            <button
+              className={`follow-btn ${follows[currentVideo.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
+              onClick={() => toggleFollow(currentVideo.userId)}
+            >
+              {follows[currentVideo.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
