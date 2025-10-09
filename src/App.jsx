@@ -163,8 +163,7 @@ export default function App() {
           setLikes={setLikes}
           follows={follows}
           setFollows={setFollows}
-          onVideoClick={(videoId) => openShortsMode(videoId, uploads)}
-          randomize={true}
+          onUsernameClick={handleUserClick}
         />
       ),
       shorts: <PageShorts uploads={uploads} currentUser={profile} likes={likes} setLikes={setLikes} follows={follows} setFollows={setFollows} />,
@@ -176,6 +175,7 @@ export default function App() {
           setLikes={setLikes}
           follows={follows}
           setFollows={setFollows}
+          onUsernameClick={handleUserClick}
         />
       ),
       profile: (
@@ -200,6 +200,7 @@ export default function App() {
           setFollows={setFollows}
           allowDelete={true}
           setUploads={setUploads}
+          onUsernameClick={handleUserClick}
         />
       ),
     }),
