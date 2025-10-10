@@ -123,8 +123,8 @@ export function VideosFeed({
     <div className="video-grid">
       {uploads.map((v, index) => (
         <div key={v.id} className="video-card" style={{ animationDelay: `${index * 0.05}s` }}>
-          <div className="video-media-wrapper">
-            <video controls>
+          <div className="video-media-wrapper" onClick={() => onVideoClick && onVideoClick(v.id)}>
+            <video controls onClick={(e) => e.stopPropagation()}>
               <source src={v.url} type="video/mp4" />
             </video>
           </div>

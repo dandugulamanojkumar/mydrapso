@@ -3,7 +3,7 @@ import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
 import { UploadModal } from "./components/UploadModal";
 import { VideosFeed } from "./components/VideosFeed";
-import { ShortsPlayer } from "./components/ShortsPlayer";
+import { InlineVideoPlayer } from "./components/InlineVideoPlayer";
 import { SearchResults } from "./components/SearchResults";
 import { PageProfile } from "./pages/PageProfile";
 import { PageSettings } from "./pages/PageSettings";
@@ -40,11 +40,9 @@ export default function App() {
   const [locationText, setLocationText] = useState("");
   const fileInputRef = useRef(null);
 
-  /* ===== SHORTS MODE STATE ===== */
-  const [shortsMode, setShortsMode] = useState(false);
-  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
-  const [shortsVideos, setShortsVideos] = useState([]);
-  const [videoHistory, setVideoHistory] = useState([]);
+  /* ===== INLINE VIDEO PLAYER STATE ===== */
+  const [showInlinePlayer, setShowInlinePlayer] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState(null);
 
   /* ===== SEARCH STATE ===== */
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -63,49 +61,18 @@ export default function App() {
     // Add actual logout logic here if needed
   };
 
-  /* ===== SHORTS MODE FUNCTIONS ===== */
-  const openShortsMode = (videoId, allVideos) => {
-    const shuffled = shuffleArray(allVideos);
-    const videoIndex = shuffled.findIndex(v => v.id === videoId);
-    setShortsVideos(shuffled);
-    setCurrentVideoIndex(videoIndex >= 0 ? videoIndex : 0);
-    setVideoHistory([shuffled[videoIndex >= 0 ? videoIndex : 0]]);
-    setShortsMode(true);
-  };
-
-  const closeShortsMode = () => {
-    setShortsMode(false);
-    setShortsVideos([]);
-    setCurrentVideoIndex(0);
-    setVideoHistory([]);
-  };
-
-  const navigateShorts = (direction) => {
-    if (direction === 'next') {
-      if (currentVideoIndex < shortsVideos.length - 1) {
-        setCurrentVideoIndex(prev => prev + 1);
-        if (!videoHistory.find(v => v.id === shortsVideos[currentVideoIndex + 1].id)) {
-          setVideoHistory(prev => [...prev, shortsVideos[currentVideoIndex + 1]]);
-        }
-      } else {
-        const availableVideos = uploads.filter(v => !videoHistory.map(h => h.id).includes(v.id));
-        if (availableVideos.length > 0) {
-          const shuffled = shuffleArray(availableVideos);
-          const nextVideo = shuffled[0];
-          setShortsVideos(prev => [...prev, nextVideo]);
-          setVideoHistory(prev => [...prev, nextVideo]);
-          setCurrentVideoIndex(prev => prev + 1);
-        } else {
-          const shuffled = shuffleArray(uploads);
-          const nextVideo = shuffled[0];
-          setShortsVideos(prev => [...prev, nextVideo]);
-          setVideoHistory(prev => [...prev, nextVideo]);
-          setCurrentVideoIndex(prev => prev + 1);
-        }
-      }
-    } else if (direction === 'prev' && currentVideoIndex > 0) {
-      setCurrentVideoIndex(prev => prev - 1);
+  /* ===== INLINE VIDEO PLAYER FUNCTIONS ===== */
+  const openInlinePlayer = (videoId) => {
+    const video = uploads.find(v => v.id === videoId);
+    if (video) {
+      setSelectedVideo(video);
+      setShowInlinePlayer(true);
     }
+  };
+
+  const closeInlinePlayer = () => {
+    setShowInlinePlayer(false);
+    setSelectedVideo(null);
   };
 
   /* ===== SEARCH FUNCTION ===== */
@@ -135,8 +102,7 @@ export default function App() {
   };
 
   const handleVideoClick = (videoId) => {
-    const allVideos = shuffleArray(uploads);
-    openShortsMode(videoId, allVideos);
+    openInlinePlayer(videoId);
   };
 
   const toggleFollow = (uid) => {
@@ -164,6 +130,7 @@ export default function App() {
           follows={follows}
           setFollows={setFollows}
           onUsernameClick={handleUserClick}
+          onVideoClick={openInlinePlayer}
         />
       ),
       shorts: <PageShorts uploads={uploads} currentUser={profile} likes={likes} setLikes={setLikes} follows={follows} setFollows={setFollows} />,
@@ -176,6 +143,7 @@ export default function App() {
           follows={follows}
           setFollows={setFollows}
           onUsernameClick={handleUserClick}
+          onVideoClick={openInlinePlayer}
         />
       ),
       profile: (
@@ -201,6 +169,7 @@ export default function App() {
           allowDelete={true}
           setUploads={setUploads}
           onUsernameClick={handleUserClick}
+          onVideoClick={openInlinePlayer}
         />
       ),
     }),
@@ -288,17 +257,17 @@ export default function App() {
       <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`} id="main-content">
         <div className="loaded-page">{pages[activePage] || <EmptyPage />}</div>
       </main>
-      {shortsMode && (
-        <ShortsPlayer
-          videos={shortsVideos}
-          currentIndex={currentVideoIndex}
+      {showInlinePlayer && selectedVideo && (
+        <InlineVideoPlayer
+          initialVideo={selectedVideo}
+          allVideos={uploads}
+          onClose={closeInlinePlayer}
           currentUser={profile}
           likes={likes}
           setLikes={setLikes}
           follows={follows}
           setFollows={setFollows}
-          onClose={closeShortsMode}
-          onNavigate={navigateShorts}
+          onUsernameClick={handleUserClick}
         />
       )}
       {showSearchResults && (

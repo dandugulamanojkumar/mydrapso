@@ -1,41 +1,58 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { shuffleArray } from '../utils/videoUtils';
 
-export function PageShorts({
-  uploads,
+export function InlineVideoPlayer({
+  initialVideo,
+  allVideos,
+  onClose,
   currentUser,
   likes,
   setLikes,
   follows,
-  setFollows
+  setFollows,
+  onUsernameClick
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [videoList, setVideoList] = useState([]);
   const [videoHistory, setVideoHistory] = useState([]);
-  const [randomVideos, setRandomVideos] = useState([]);
   const containerRef = useRef(null);
 
   useEffect(() => {
-    if (uploads.length > 0 && randomVideos.length === 0) {
-      const shuffled = shuffleArray(uploads);
-      setRandomVideos([shuffled[0]]);
-      setVideoHistory([shuffled[0]]);
+    const shuffled = shuffleArray(allVideos);
+    const startIndex = shuffled.findIndex(v => v.id === initialVideo.id);
+    if (startIndex >= 0) {
+      setVideoList(shuffled);
+      setCurrentIndex(startIndex);
+      setVideoHistory([shuffled[startIndex]]);
+    } else {
+      setVideoList([initialVideo, ...shuffled]);
+      setCurrentIndex(0);
+      setVideoHistory([initialVideo]);
     }
-  }, [uploads]);
+  }, [initialVideo, allVideos]);
 
   const loadNextVideo = () => {
-    const availableVideos = uploads.filter(v => !videoHistory.map(h => h.id).includes(v.id));
-    if (availableVideos.length > 0) {
-      const shuffled = shuffleArray(availableVideos);
-      const nextVideo = shuffled[0];
-      setRandomVideos(prev => [...prev, nextVideo]);
-      setVideoHistory(prev => [...prev, nextVideo]);
-      setCurrentIndex(prev => prev + 1);
+    if (currentIndex < videoList.length - 1) {
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      if (!videoHistory.find(v => v.id === videoList[nextIndex].id)) {
+        setVideoHistory(prev => [...prev, videoList[nextIndex]]);
+      }
     } else {
-      const shuffled = shuffleArray(uploads);
-      const nextVideo = shuffled[0];
-      setRandomVideos(prev => [...prev, nextVideo]);
-      setVideoHistory(prev => [...prev, nextVideo]);
-      setCurrentIndex(prev => prev + 1);
+      const availableVideos = allVideos.filter(v => !videoHistory.map(h => h.id).includes(v.id));
+      if (availableVideos.length > 0) {
+        const shuffled = shuffleArray(availableVideos);
+        const nextVideo = shuffled[0];
+        setVideoList(prev => [...prev, nextVideo]);
+        setVideoHistory(prev => [...prev, nextVideo]);
+        setCurrentIndex(prev => prev + 1);
+      } else {
+        const shuffled = shuffleArray(allVideos);
+        const nextVideo = shuffled[0];
+        setVideoList(prev => [...prev, nextVideo]);
+        setVideoHistory(prev => [...prev, nextVideo]);
+        setCurrentIndex(prev => prev + 1);
+      }
     }
   };
 
@@ -88,7 +105,9 @@ export function PageShorts({
     };
 
     const handleKeyDown = (e) => {
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         loadNextVideo();
       } else if (e.key === 'ArrowUp') {
@@ -112,7 +131,7 @@ export function PageShorts({
         containerRef.current.removeEventListener('touchend', handleTouchEnd);
       }
     };
-  }, [currentIndex, videoHistory, uploads]);
+  }, [currentIndex, videoList, videoHistory, allVideos]);
 
   const toggleLike = (id) => {
     setLikes((prev) => prev.includes(id) ? prev.filter((vid) => vid !== id) : [...prev, id]);
@@ -147,8 +166,6 @@ export function PageShorts({
     } else {
       navigator.clipboard.writeText(window.location.href).then(() => {
         alert('Video link copied to clipboard!');
-      }).catch(() => {
-        alert('Copy this link to share: ' + window.location.href);
       });
     }
   };
@@ -157,7 +174,7 @@ export function PageShorts({
     const buttons = [];
 
     buttons.push(
-      <div key="like" className="clickz-action-btn" onClick={() => toggleLike(video.id)}>
+      <div key="like" className="inline-action-btn" onClick={() => toggleLike(video.id)}>
         <svg className="action-icon" viewBox="0 0 24 24" fill={likes.includes(video.id) ? "currentColor" : "none"} stroke="currentColor">
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
@@ -167,7 +184,7 @@ export function PageShorts({
 
     if (video.hasAffiliate) {
       buttons.push(
-        <div key="cart" className="clickz-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
+        <div key="cart" className="inline-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
           <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <circle cx="9" cy="21" r="1"/>
             <circle cx="20" cy="21" r="1"/>
@@ -182,20 +199,20 @@ export function PageShorts({
       buttons.push(
         <div
           key="location"
-          className="clickz-action-btn"
+          className="inline-action-btn"
           onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(video.location || '')}`, "_blank")}
         >
           <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
             <circle cx="12" cy="10" r="3"/>
           </svg>
-          <span>Location</span>
+          <span>Map</span>
         </div>
       );
     }
 
     buttons.push(
-      <div key="comment" className="clickz-action-btn" onClick={() => openComments(video.id)}>
+      <div key="comment" className="inline-action-btn" onClick={() => openComments(video.id)}>
         <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
@@ -204,7 +221,7 @@ export function PageShorts({
     );
 
     buttons.push(
-      <div key="share" className="clickz-action-btn" onClick={() => shareVideo(video)}>
+      <div key="share" className="inline-action-btn" onClick={() => shareVideo(video)}>
         <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
           <polyline points="16 6 12 2 8 6"/>
@@ -217,57 +234,61 @@ export function PageShorts({
     return buttons;
   };
 
-  if (!uploads.length || randomVideos.length === 0) {
-    return (
-      <div style={{ textAlign: 'center', marginTop: '100px' }}>
-        <h2>🎬 Clickz</h2>
-        <p>No videos available for Clickz yet.</p>
-      </div>
-    );
-  }
+  if (videoList.length === 0) return null;
 
-  const currentVideo = randomVideos[currentIndex];
+  const currentVideo = videoList[currentIndex];
 
   return (
-    <div className="clickz-feed-fullscreen" ref={containerRef}>
-      <div className="clickz-container-fullscreen">
-        <video
-          key={currentVideo.id}
-          className="clickz-video-fullscreen"
-          src={currentVideo.url}
-          controls
-          loop
-          autoPlay
-          muted={false}
-        />
+    <div className="inline-video-player-overlay">
+      <div className="inline-video-player-container" ref={containerRef}>
+        <button className="inline-close-btn" onClick={onClose}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
 
-        <div className="clickz-actions">
-          {renderActionButtons(currentVideo)}
-        </div>
+        <div className="inline-video-content">
+          <video
+            key={currentVideo.id}
+            className="inline-video"
+            src={currentVideo.url}
+            controls
+            autoPlay
+            loop
+          />
 
-        <div className="clickz-profile">
-          <img src={currentUser.avatar} alt="Profile" />
-          <div>
-            <div className="clickz-username">@{currentUser.name}</div>
-            <div style={{ fontSize: '14px', marginTop: '4px', opacity: 0.8 }}>
-              {currentVideo.title}
-            </div>
-            <div style={{ fontSize: '12px', marginTop: '2px', opacity: 0.6 }}>
-              {currentVideo.desc}
-            </div>
+          <div className="inline-video-actions">
+            {renderActionButtons(currentVideo)}
           </div>
-          {currentVideo.userId !== currentUser.id && (
-            <button
-              className={`follow-btn ${follows[currentVideo.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
-              onClick={() => toggleFollow(currentVideo.userId)}
-            >
-              {follows[currentVideo.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
-            </button>
-          )}
-        </div>
 
-        <div className="clickz-scroll-hint">
-          Scroll to see more videos
+          <div className="inline-video-info">
+            <div className="inline-video-header">
+              <img src={currentUser.avatar} alt="Profile" className="inline-user-avatar" />
+              <div>
+                <div
+                  className="inline-username"
+                  onClick={() => onUsernameClick && onUsernameClick(currentVideo.userId)}
+                >
+                  @{currentUser.name}
+                </div>
+                <div className="inline-video-title">{currentVideo.title}</div>
+              </div>
+              {currentVideo.userId !== currentUser.id && (
+                <button
+                  className={`follow-btn ${follows[currentVideo.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
+                  onClick={() => toggleFollow(currentVideo.userId)}
+                >
+                  {follows[currentVideo.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
+                </button>
+              )}
+            </div>
+            <div className="inline-video-desc">{currentVideo.desc}</div>
+          </div>
+
+          <div className="inline-video-counter">
+            {currentIndex + 1} / {videoList.length}
+          </div>
         </div>
       </div>
     </div>
