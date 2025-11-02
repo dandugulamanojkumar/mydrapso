@@ -133,7 +133,7 @@ export default function App() {
           onVideoClick={openInlinePlayer}
         />
       ),
-      shorts: <PageShorts uploads={uploads} currentUser={profile} likes={likes} setLikes={setLikes} follows={follows} setFollows={setFollows} />,
+      shorts: <PageShorts uploads={uploads} currentUser={profile} likes={likes} setLikes={setLikes} follows={follows} setFollows={setFollows} onUsernameClick={handleUserClick} />,
       liked: (
         <VideosFeed
           uploads={uploads.filter((v) => likes.includes(v.id))}

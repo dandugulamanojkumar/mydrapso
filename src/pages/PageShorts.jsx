@@ -7,7 +7,8 @@ export function PageShorts({
   likes,
   setLikes,
   follows,
-  setFollows
+  setFollows,
+  onUsernameClick
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [videoHistory, setVideoHistory] = useState([]);
@@ -219,8 +220,8 @@ export function PageShorts({
 
   if (!uploads.length || randomVideos.length === 0) {
     return (
-      <div style={{ textAlign: 'center', marginTop: '100px' }}>
-        <h2>🎬 Clickz</h2>
+      <div className="no-videos-message" style={{ textAlign: 'center', marginTop: '100px' }}>
+        <h2>Clickz</h2>
         <p>No videos available for Clickz yet.</p>
       </div>
     );
@@ -248,7 +249,12 @@ export function PageShorts({
         <div className="clickz-profile">
           <img src={currentUser.avatar} alt="Profile" />
           <div>
-            <div className="clickz-username">@{currentUser.name}</div>
+            <div
+              className="clickz-username clickz-username-clickable"
+              onClick={() => onUsernameClick && onUsernameClick(currentVideo.userId)}
+            >
+              @{currentUser.name}
+            </div>
             <div style={{ fontSize: '14px', marginTop: '4px', opacity: 0.8 }}>
               {currentVideo.title}
             </div>
