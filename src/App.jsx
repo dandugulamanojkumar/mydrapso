@@ -13,7 +13,13 @@ import { EmptyPage } from "./pages/EmptyPage";
 import { PageSignIn } from "./pages/PageSignIn";
 import { SignUpFlow } from "./pages/SignUpFlow";
 import { shuffleArray } from "./utils/videoUtils";
+import { createClient } from "@supabase/supabase-js";
 import "./styles.css";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
@@ -24,6 +30,7 @@ export default function App() {
   /* ===== AUTH STATE ===== */
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
+  const [videosLoading, setVideosLoading] = useState(false);
 
   /* ===== USER SYSTEM ===== */
   const [profile, setProfile] = useState({
@@ -63,8 +70,14 @@ export default function App() {
 
   /* ===== LOGOUT FUNCTION ===== */
   const handleLogout = () => {
-    alert("Logging out...");
-    // Add actual logout logic here if needed
+    localStorage.removeItem("userData");
+    setIsLoggedIn(false);
+    setProfile({
+      id: "user123",
+      name: "Manoj",
+      avatar: "https://i.pravatar.cc/50?img=3",
+    });
+    setUploads([]);
   };
 
   /* ===== INLINE VIDEO PLAYER FUNCTIONS ===== */
@@ -218,8 +231,42 @@ export default function App() {
         name: user.full_name,
         avatar: user.avatar || "https://i.pravatar.cc/50?img=3",
       });
+      loadVideos();
     }
   }, []);
+
+  const loadVideos = async () => {
+    setVideosLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("videos")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const formattedVideos = data.map(video => ({
+        id: video.id,
+        url: video.video_url,
+        name: video.title,
+        duration: video.duration,
+        title: video.title,
+        desc: video.description,
+        hasAffiliate: video.has_affiliate,
+        affiliateLink: video.affiliate_link,
+        hasLocation: video.has_location,
+        location: video.location,
+        userId: video.user_id,
+        likes: video.likes,
+      }));
+
+      setUploads(formattedVideos);
+    } catch (error) {
+      console.error("Load videos error:", error);
+    } finally {
+      setVideosLoading(false);
+    }
+  };
 
   const handleSignInSuccess = (userData) => {
     setIsLoggedIn(true);
@@ -242,38 +289,62 @@ export default function App() {
 
   /* ===== UPLOAD ===== */
   const canUpload = title.trim() && desc.trim();
-  const submitUpload = (e) => {
+  const submitUpload = async (e) => {
     e.preventDefault();
     if (!videoMeta) {
       alert("Please select a valid video first.");
       return;
     }
-    const record = {
-      id: Date.now().toString(),
-      url: videoMeta.url,
-      name: videoMeta.file.name,
-      duration: videoMeta.duration,
-      title: title.trim(),
-      desc: desc.trim(),
-      hasAffiliate: !!showAffiliate,
-      affiliateLink: affiliateLink.trim(),
-      hasLocation: !!showLocation,
-      location: locationText.trim(),
-      userId: profile.id,
-      likes: 0,
-    };
-    setUploads((prev) => [record, ...prev]);
-    setShowModal(false);
-    setStep(1);
-    setVideoMeta(null);
-    setTitle("");
-    setDesc("");
-    setShowAffiliate(false);
-    setAffiliateLink("");
-    setShowLocation(false);
-    setLocationText("");
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setActivePage("videos");
+
+    try {
+      const { data, error } = await supabase
+        .from("videos")
+        .insert([{
+          user_id: profile.id,
+          title: title.trim(),
+          description: desc.trim(),
+          video_url: videoMeta.url,
+          duration: Math.floor(videoMeta.duration),
+          has_affiliate: !!showAffiliate,
+          affiliate_link: showAffiliate ? affiliateLink.trim() : null,
+          has_location: !!showLocation,
+          location: showLocation ? locationText.trim() : null,
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const record = {
+        id: data.id,
+        url: videoMeta.url,
+        name: videoMeta.file.name,
+        duration: videoMeta.duration,
+        title: data.title,
+        desc: data.description,
+        hasAffiliate: data.has_affiliate,
+        affiliateLink: data.affiliate_link,
+        hasLocation: data.has_location,
+        location: data.location,
+        userId: profile.id,
+        likes: 0,
+      };
+      setUploads((prev) => [record, ...prev]);
+      setShowModal(false);
+      setStep(1);
+      setVideoMeta(null);
+      setTitle("");
+      setDesc("");
+      setShowAffiliate(false);
+      setAffiliateLink("");
+      setShowLocation(false);
+      setLocationText("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      setActivePage("videos");
+    } catch (error) {
+      console.error("Upload error:", error);
+      alert("Failed to upload video. Please try again.");
+    }
   };
 
   if (!isLoggedIn) {

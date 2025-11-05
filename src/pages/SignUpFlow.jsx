@@ -39,6 +39,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
   const [canResend, setCanResend] = useState(false);
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
+  const [sentOtp, setSentOtp] = useState("");
 
   useEffect(() => {
     if (step === 3 && timer > 0) {
@@ -110,7 +111,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
     return age;
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     setError("");
 
     if (step === 1) {
@@ -133,9 +134,10 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
           return;
         }
       }
+      await sendOtp();
       setStep(3);
     } else if (step === 3) {
-      if (signupData.verificationCode !== "123456") {
+      if (signupData.verificationCode !== sentOtp) {
         setError("Invalid verification code");
         return;
       }
@@ -241,7 +243,42 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
     }
   };
 
-  const handleResendCode = () => {
+  const sendOtp = async () => {
+    setLoading(true);
+    try {
+      const contact = signupData.method === "email" ? signupData.email : signupData.mobileNumber;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            contact,
+            method: signupData.method,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        setSentOtp(data.otp);
+        console.log("OTP sent:", data.otp);
+      } else {
+        setError("Failed to send OTP");
+      }
+    } catch (err) {
+      console.error("OTP send error:", err);
+      setError("Failed to send OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    await sendOtp();
     setTimer(300);
     setCanResend(false);
   };
@@ -397,7 +434,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
                     verificationCode: e.target.value,
                   })
                 }
-                placeholder="Enter 6-digit code (use 123456)"
+                placeholder="Enter 6-digit code"
                 maxLength={6}
                 autoFocus
               />
