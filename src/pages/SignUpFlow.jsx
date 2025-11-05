@@ -39,6 +39,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
   const [canResend, setCanResend] = useState(false);
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
+  const [displayOtp, setDisplayOtp] = useState("");
 
   useEffect(() => {
     if (step === 3 && timer > 0) {
@@ -284,8 +285,10 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
       );
 
       const data = await response.json();
-      if (data.success) {
-        console.log("OTP sent successfully");
+      if (data.success && data.otp) {
+        setDisplayOtp(data.otp);
+        setTimeout(() => setDisplayOtp(""), 30000);
+        console.log("OTP sent successfully:", data.otp);
       } else {
         setError("Failed to send OTP");
       }
@@ -441,6 +444,16 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
                 ? signupData.email
                 : signupData.mobileNumber}
             </p>
+
+            {displayOtp && (
+              <div className="otp-display">
+                <p className="otp-display-label">Your OTP Code:</p>
+                <p className="otp-display-code">{displayOtp}</p>
+                <p className="otp-display-note">
+                  SMS/Email service not configured. Use this code to verify.
+                </p>
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label">Verification Code</label>

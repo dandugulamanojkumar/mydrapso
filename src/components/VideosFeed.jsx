@@ -1,4 +1,10 @@
 import React from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 export function VideosFeed({
   uploads,
@@ -31,7 +37,23 @@ export function VideosFeed({
     });
   };
 
-  const deleteVideo = (id) => setUploads && setUploads((prev) => prev.filter((v) => v.id !== id));
+  const deleteVideo = async (id) => {
+    if (!confirm('Are you sure you want to delete this video?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('videos')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setUploads && setUploads((prev) => prev.filter((v) => v.id !== id));
+    } catch (error) {
+      console.error('Delete video error:', error);
+      alert('Failed to delete video. Please try again.');
+    }
+  };
 
   const openComments = (videoId) => {
     alert(`Comments for video ${videoId} - Feature coming soon!`);
