@@ -10,6 +10,8 @@ import { PageSettings } from "./pages/PageSettings";
 import { PageShorts } from "./pages/PageShorts";
 import { PageNotifications } from "./pages/PageNotifications";
 import { EmptyPage } from "./pages/EmptyPage";
+import { PageSignIn } from "./pages/PageSignIn";
+import { SignUpFlow } from "./pages/SignUpFlow";
 import { shuffleArray } from "./utils/videoUtils";
 import "./styles.css";
 
@@ -18,6 +20,10 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState("home");
   const [uploads, setUploads] = useState([]);
+
+  /* ===== AUTH STATE ===== */
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);
 
   /* ===== USER SYSTEM ===== */
   const [profile, setProfile] = useState({
@@ -199,6 +205,39 @@ export default function App() {
       URL.revokeObjectURL(tempUrl);
       setVideoMeta(null);
     };
+  };
+
+  /* ===== AUTH HANDLERS ===== */
+  useEffect(() => {
+    const userData = localStorage.getItem("userData");
+    if (userData) {
+      const user = JSON.parse(userData);
+      setIsLoggedIn(true);
+      setProfile({
+        id: user.id,
+        name: user.full_name,
+        avatar: user.avatar || "https://i.pravatar.cc/50?img=3",
+      });
+    }
+  }, []);
+
+  const handleSignInSuccess = (userData) => {
+    setIsLoggedIn(true);
+    setProfile({
+      id: userData.id,
+      name: userData.full_name,
+      avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
+    });
+  };
+
+  const handleSignUpComplete = (userData) => {
+    setShowSignUp(false);
+    setIsLoggedIn(true);
+    setProfile({
+      id: userData.id,
+      name: userData.full_name,
+      avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
+    });
   };
 
   /* ===== UPLOAD ===== */
