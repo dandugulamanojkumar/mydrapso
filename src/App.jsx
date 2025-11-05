@@ -237,6 +237,23 @@ export default function App() {
     setActivePage("videos");
   };
 
+  if (!isLoggedIn) {
+    if (showSignUp) {
+      return (
+        <SignUpFlow
+          onSignUpComplete={handleSignUpComplete}
+          onBackToSignIn={() => setShowSignUp(false)}
+        />
+      );
+    }
+    return (
+      <PageSignIn
+        onSignInSuccess={handleSignInSuccess}
+        onSignUpClick={() => setShowSignUp(true)}
+      />
+    );
+  }
+
   return (
     <div className="app-wrapper">
       <Topbar
