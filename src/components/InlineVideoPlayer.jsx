@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { shuffleArray } from '../utils/videoUtils';
+import { CommentsPanel } from './CommentsPanel';
+import { ArrowLeft } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 export function InlineVideoPlayer({
   initialVideo,
@@ -15,6 +23,8 @@ export function InlineVideoPlayer({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [videoList, setVideoList] = useState([]);
   const [videoHistory, setVideoHistory] = useState([]);
+  const [showComments, setShowComments] = useState(false);
+  const [commentCounts, setCommentCounts] = useState({});
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -151,8 +161,34 @@ export function InlineVideoPlayer({
   };
 
   const openComments = (videoId) => {
-    alert(`Comments for video ${videoId} - Feature coming soon!`);
+    setShowComments(true);
   };
+
+  const closeComments = () => {
+    setShowComments(false);
+    loadCommentCount(currentVideo.id);
+  };
+
+  const loadCommentCount = async (videoId) => {
+    try {
+      const { count, error } = await supabase
+        .from('comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('video_id', videoId);
+
+      if (!error) {
+        setCommentCounts(prev => ({ ...prev, [videoId]: count || 0 }));
+      }
+    } catch (error) {
+      console.error('Load comment count error:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (currentVideo) {
+      loadCommentCount(currentVideo.id);
+    }
+  }, [currentVideo]);
 
   const shareVideo = (video) => {
     const shareData = {
@@ -216,7 +252,7 @@ export function InlineVideoPlayer({
         <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
-        <span>0</span>
+        <span>{commentCounts[video.id] || 0}</span>
       </div>
     );
 
@@ -241,11 +277,8 @@ export function InlineVideoPlayer({
   return (
     <div className="inline-video-player-overlay">
       <div className="inline-video-player-container" ref={containerRef}>
-        <button className="inline-close-btn" onClick={onClose}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+        <button className="inline-back-btn" onClick={onClose}>
+          <ArrowLeft size={28} strokeWidth={2.5} />
         </button>
 
         <div className="inline-video-content">
@@ -291,6 +324,14 @@ export function InlineVideoPlayer({
           </div>
         </div>
       </div>
+
+      {showComments && (
+        <CommentsPanel
+          videoId={currentVideo.id}
+          currentUser={currentUser}
+          onClose={closeComments}
+        />
+      )}
     </div>
   );
 }

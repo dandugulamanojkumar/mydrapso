@@ -39,8 +39,6 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
   const [canResend, setCanResend] = useState(false);
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
-  const [sentOtp, setSentOtp] = useState("");
-  const [showOtpOnScreen, setShowOtpOnScreen] = useState(false);
 
   useEffect(() => {
     if (step === 3 && timer > 0) {
@@ -138,10 +136,32 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
       await sendOtp();
       setStep(3);
     } else if (step === 3) {
-      if (signupData.verificationCode !== sentOtp) {
-        setError("Invalid verification code");
+      setLoading(true);
+      const contact = signupData.method === "email" ? signupData.email : signupData.mobileNumber;
+
+      const { data, error } = await supabase
+        .from("otp_verifications")
+        .select("*")
+        .eq("contact", contact)
+        .eq("otp_code", signupData.verificationCode)
+        .eq("verified", false)
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      setLoading(false);
+
+      if (error || !data) {
+        setError("Invalid or expired verification code");
         return;
       }
+
+      await supabase
+        .from("otp_verifications")
+        .update({ verified: true })
+        .eq("id", data.id);
+
       setStep(4);
     } else if (step === 4) {
       if (signupData.password.length < 8) {
@@ -265,10 +285,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
 
       const data = await response.json();
       if (data.success) {
-        setSentOtp(data.otp);
-        setShowOtpOnScreen(true);
-        console.log("OTP sent:", data.otp);
-        setTimeout(() => setShowOtpOnScreen(false), 10000);
+        console.log("OTP sent successfully");
       } else {
         setError("Failed to send OTP");
       }
@@ -424,16 +441,6 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
                 ? signupData.email
                 : signupData.mobileNumber}
             </p>
-
-            {showOtpOnScreen && sentOtp && (
-              <div className="otp-display">
-                <p className="otp-display-label">Your OTP Code:</p>
-                <p className="otp-display-code">{sentOtp}</p>
-                <p className="otp-display-note">
-                  This code will disappear in 10 seconds. In production, this would be sent via SMS/Email.
-                </p>
-              </div>
-            )}
 
             <div className="form-group">
               <label className="form-label">Verification Code</label>
