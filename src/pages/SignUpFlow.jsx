@@ -40,6 +40,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
   const [sentOtp, setSentOtp] = useState("");
+  const [showOtpOnScreen, setShowOtpOnScreen] = useState(false);
 
   useEffect(() => {
     if (step === 3 && timer > 0) {
@@ -128,9 +129,9 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
           return;
         }
       } else {
-        const phoneRegex = /^[0-9]{10}$/;
+        const phoneRegex = /^[6-9][0-9]{9}$/;
         if (!phoneRegex.test(signupData.mobileNumber)) {
-          setError("Please enter a valid 10-digit mobile number");
+          setError("Please enter a valid Indian mobile number (10 digits starting with 6-9)");
           return;
         }
       }
@@ -265,7 +266,9 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
       const data = await response.json();
       if (data.success) {
         setSentOtp(data.otp);
+        setShowOtpOnScreen(true);
         console.log("OTP sent:", data.otp);
+        setTimeout(() => setShowOtpOnScreen(false), 10000);
       } else {
         setError("Failed to send OTP");
       }
@@ -421,6 +424,16 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
                 ? signupData.email
                 : signupData.mobileNumber}
             </p>
+
+            {showOtpOnScreen && sentOtp && (
+              <div className="otp-display">
+                <p className="otp-display-label">Your OTP Code:</p>
+                <p className="otp-display-code">{sentOtp}</p>
+                <p className="otp-display-note">
+                  This code will disappear in 10 seconds. In production, this would be sent via SMS/Email.
+                </p>
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label">Verification Code</label>

@@ -402,6 +402,52 @@
   text-decoration: underline;
 }
 
+.otp-display {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+  animation: slideIn 0.4s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.otp-display-label {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.otp-display-code {
+  color: white;
+  font-size: 36px;
+  font-weight: 700;
+  margin: 0 0 12px 0;
+  letter-spacing: 8px;
+  font-family: 'Courier New', monospace;
+}
+
+.otp-display-note {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.5;
+}
+
 .no-videos-message h2 {
   color: var(--text);
 }
