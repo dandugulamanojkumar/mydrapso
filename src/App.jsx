@@ -272,9 +272,10 @@ export default function App() {
     setIsLoggedIn(true);
     setProfile({
       id: userData.id,
-      name: userData.full_name,
+      name: userData.username || userData.full_name,
       avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
     });
+    loadVideos();
   };
 
   const handleSignUpComplete = (userData) => {
@@ -282,9 +283,10 @@ export default function App() {
     setIsLoggedIn(true);
     setProfile({
       id: userData.id,
-      name: userData.full_name,
+      name: userData.username || userData.full_name,
       avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
     });
+    loadVideos();
   };
 
   /* ===== UPLOAD ===== */
