@@ -1,17 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 import {
-  Mail,
-  Smartphone,
   ArrowLeft,
   Eye,
   EyeOff,
-  Check,
   Calendar,
   User as UserIcon,
   AtSign,
 } from "lucide-react";
-import CryptoJS from "crypto-js";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -21,10 +17,7 @@ const supabase = createClient(
 export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
   const [step, setStep] = useState(1);
   const [signupData, setSignupData] = useState({
-    method: "",
     email: "",
-    mobileNumber: "",
-    verificationCode: "",
     password: "",
     confirmPassword: "",
     dateOfBirth: "",
@@ -35,74 +28,44 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [timer, setTimer] = useState(300);
-  const [canResend, setCanResend] = useState(false);
   const [usernameChecking, setUsernameChecking] = useState(false);
   const [usernameAvailable, setUsernameAvailable] = useState(null);
-  const [displayOtp, setDisplayOtp] = useState("");
 
   useEffect(() => {
-    if (step === 3 && timer > 0) {
-      const interval = setInterval(() => {
-        setTimer((prev) => {
-          if (prev <= 1) {
-            setCanResend(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, [step, timer]);
-
-  useEffect(() => {
-    if (step === 7 && signupData.username.length >= 3) {
-      const checkUsername = setTimeout(async () => {
-        setUsernameChecking(true);
+    const checkUsername = async () => {
+      if (signupData.username.length < 3) {
         setUsernameAvailable(null);
+        return;
+      }
 
+      setUsernameChecking(true);
+      try {
         const { data, error } = await supabase
           .from("users")
           .select("username")
           .eq("username", signupData.username)
           .maybeSingle();
 
-        setUsernameChecking(false);
         setUsernameAvailable(!data);
-      }, 500);
+      } catch (err) {
+        console.error("Username check error:", err);
+      } finally {
+        setUsernameChecking(false);
+      }
+    };
 
-      return () => clearTimeout(checkUsername);
-    } else {
-      setUsernameAvailable(null);
-    }
-  }, [signupData.username, step]);
+    const debounce = setTimeout(() => {
+      if (signupData.username) {
+        checkUsername();
+      }
+    }, 500);
 
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  const calculatePasswordStrength = (pass) => {
-    let strength = 0;
-    if (pass.length >= 8) strength++;
-    if (pass.length >= 12) strength++;
-    if (/[a-z]/.test(pass) && /[A-Z]/.test(pass)) strength++;
-    if (/\d/.test(pass)) strength++;
-    if (/[^a-zA-Z0-9]/.test(pass)) strength++;
-    return strength;
-  };
-
-  const getStrengthLabel = (strength) => {
-    const labels = ["Very Weak", "Weak", "Fair", "Good", "Strong"];
-    const colors = ["#ef4444", "#f59e0b", "#eab308", "#84cc16", "#10b981"];
-    return { label: labels[strength] || "", color: colors[strength] || "#e0e0e0" };
-  };
+    return () => clearTimeout(debounce);
+  }, [signupData.username]);
 
   const calculateAge = (dob) => {
-    const birthDate = new Date(dob);
     const today = new Date();
+    const birthDate = new Date(dob);
     let age = today.getFullYear() - birthDate.getFullYear();
     const monthDiff = today.getMonth() - birthDate.getMonth();
     if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
@@ -111,61 +74,35 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
     return age;
   };
 
-  const handleNext = async () => {
+  const calculatePasswordStrength = (password) => {
+    let strength = 0;
+    if (password.length >= 8) strength++;
+    if (password.length >= 12) strength++;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+    if (/[0-9]/.test(password)) strength++;
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+    return strength;
+  };
+
+  const getStrengthLabel = (strength) => {
+    if (strength <= 1) return { label: "Weak", color: "#ef4444" };
+    if (strength <= 2) return { label: "Fair", color: "#f59e0b" };
+    if (strength <= 3) return { label: "Good", color: "#3b82f6" };
+    if (strength <= 4) return { label: "Strong", color: "#10b981" };
+    return { label: "Very Strong", color: "#059669" };
+  };
+
+  const handleNext = () => {
     setError("");
 
     if (step === 1) {
-      if (!signupData.method) {
-        setError("Please select a signup method");
+      if (!signupData.email.trim() || !signupData.email.includes("@")) {
+        setError("Please enter a valid email address");
         return;
       }
       setStep(2);
     } else if (step === 2) {
-      if (signupData.method === "email") {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(signupData.email)) {
-          setError("Please enter a valid email address");
-          return;
-        }
-      } else {
-        const phoneRegex = /^[6-9][0-9]{9}$/;
-        if (!phoneRegex.test(signupData.mobileNumber)) {
-          setError("Please enter a valid Indian mobile number (10 digits starting with 6-9)");
-          return;
-        }
-      }
-      await sendOtp();
-      setStep(3);
-    } else if (step === 3) {
-      setLoading(true);
-      const contact = signupData.method === "email" ? signupData.email : signupData.mobileNumber;
-
-      const { data, error } = await supabase
-        .from("otp_verifications")
-        .select("*")
-        .eq("contact", contact)
-        .eq("otp_code", signupData.verificationCode)
-        .eq("verified", false)
-        .gt("expires_at", new Date().toISOString())
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      setLoading(false);
-
-      if (error || !data) {
-        setError("Invalid or expired verification code");
-        return;
-      }
-
-      await supabase
-        .from("otp_verifications")
-        .update({ verified: true })
-        .eq("id", data.id);
-
-      setStep(4);
-    } else if (step === 4) {
-      if (signupData.password.length < 8) {
+      if (!signupData.password || signupData.password.length < 8) {
         setError("Password must be at least 8 characters");
         return;
       }
@@ -173,8 +110,8 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
         setError("Passwords do not match");
         return;
       }
-      setStep(5);
-    } else if (step === 5) {
+      setStep(3);
+    } else if (step === 3) {
       if (!signupData.dateOfBirth) {
         setError("Please enter your date of birth");
         return;
@@ -184,13 +121,13 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
         setError("You must be at least 13 years old to sign up");
         return;
       }
-      setStep(6);
-    } else if (step === 6) {
+      setStep(4);
+    } else if (step === 4) {
       if (signupData.fullName.trim().length < 2) {
         setError("Please enter your full name");
         return;
       }
-      setStep(7);
+      setStep(5);
     }
   };
 
@@ -283,48 +220,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
     }
   };
 
-  const sendOtp = async () => {
-    setLoading(true);
-    try {
-      const contact = signupData.method === "email" ? signupData.email : signupData.mobileNumber;
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-otp`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
-          body: JSON.stringify({
-            contact,
-            method: signupData.method,
-          }),
-        }
-      );
-
-      const data = await response.json();
-      if (data.success && data.otp) {
-        setDisplayOtp(data.otp);
-        setTimeout(() => setDisplayOtp(""), 30000);
-        console.log("OTP sent successfully:", data.otp);
-      } else {
-        setError("Failed to send OTP");
-      }
-    } catch (err) {
-      console.error("OTP send error:", err);
-      setError("Failed to send OTP");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResendCode = async () => {
-    await sendOtp();
-    setTimer(300);
-    setCanResend(false);
-  };
-
-  const progress = (step / 7) * 100;
+  const progress = (step / 5) * 100;
   const passwordStrength = calculatePasswordStrength(signupData.password);
   const strengthInfo = getStrengthLabel(passwordStrength);
 
@@ -336,7 +232,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
             <div className="progress-fill" style={{ width: `${progress}%` }}></div>
           </div>
           <p className="progress-text">
-            Step {step} of 7
+            Step {step} of 5
           </p>
         </div>
 
@@ -344,35 +240,24 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
 
         {step === 1 && (
           <div className="signup-step">
-            <h2 className="step-title">How do you want to sign up?</h2>
-            <p className="step-description">Choose your preferred signup method</p>
+            <h2 className="step-title">Enter your email address</h2>
+            <p className="step-description">We'll use this for your account</p>
 
-            <div className="method-selection">
-              <div
-                className={`method-box ${
-                  signupData.method === "mobile" ? "selected" : ""
-                }`}
-                onClick={() =>
-                  setSignupData({ ...signupData, method: "mobile" })
+            <div className="form-group">
+              <label className="form-label">Email Address</label>
+              <input
+                type="email"
+                className="form-input"
+                value={signupData.email}
+                onChange={(e) =>
+                  setSignupData({
+                    ...signupData,
+                    email: e.target.value,
+                  })
                 }
-              >
-                <Smartphone />
-                <h3>Mobile Number</h3>
-                <p>Sign up with phone</p>
-              </div>
-
-              <div
-                className={`method-box ${
-                  signupData.method === "email" ? "selected" : ""
-                }`}
-                onClick={() =>
-                  setSignupData({ ...signupData, method: "email" })
-                }
-              >
-                <Mail />
-                <h3>Email Address</h3>
-                <p>Sign up with email</p>
-              </div>
+                placeholder="you@example.com"
+                autoFocus
+              />
             </div>
 
             <div className="step-actions">
@@ -387,7 +272,6 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
                 type="button"
                 className="btn btn-primary"
                 onClick={handleNext}
-                disabled={!signupData.method}
               >
                 Next
               </button>
@@ -397,41 +281,71 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
 
         {step === 2 && (
           <div className="signup-step">
-            <h2 className="step-title">
-              {signupData.method === "email"
-                ? "Enter your email address"
-                : "Enter your mobile number"}
-            </h2>
-            <p className="step-description">
-              We'll send a verification code to confirm
-            </p>
+            <h2 className="step-title">Create a password</h2>
+            <p className="step-description">Make it strong and unique</p>
 
             <div className="form-group">
-              <label className="form-label">
-                {signupData.method === "email" ? "Email Address" : "Mobile Number"}
-              </label>
-              <input
-                type={signupData.method === "email" ? "email" : "tel"}
-                className="form-input"
-                value={
-                  signupData.method === "email"
-                    ? signupData.email
-                    : signupData.mobileNumber
-                }
-                onChange={(e) =>
-                  setSignupData({
-                    ...signupData,
-                    [signupData.method === "email" ? "email" : "mobileNumber"]:
-                      e.target.value,
-                  })
-                }
-                placeholder={
-                  signupData.method === "email"
-                    ? "you@example.com"
-                    : "1234567890"
-                }
-                autoFocus
-              />
+              <label className="form-label">Password</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  className="form-input"
+                  value={signupData.password}
+                  onChange={(e) =>
+                    setSignupData({ ...signupData, password: e.target.value })
+                  }
+                  placeholder="At least 8 characters"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              {signupData.password && (
+                <div className="password-strength">
+                  <div
+                    className="strength-bar"
+                    style={{
+                      width: `${(passwordStrength / 5) * 100}%`,
+                      backgroundColor: strengthInfo.color,
+                    }}
+                  ></div>
+                  <span style={{ color: strengthInfo.color }}>
+                    {strengthInfo.label}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Confirm Password</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  className="form-input"
+                  value={signupData.confirmPassword}
+                  onChange={(e) =>
+                    setSignupData({
+                      ...signupData,
+                      confirmPassword: e.target.value,
+                    })
+                  }
+                  placeholder="Re-enter your password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
             </div>
 
             <div className="step-actions">
@@ -455,55 +369,21 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
 
         {step === 3 && (
           <div className="signup-step">
-            <h2 className="step-title">Enter verification code</h2>
-            <p className="step-description">
-              Code sent to{" "}
-              {signupData.method === "email"
-                ? signupData.email
-                : signupData.mobileNumber}
-            </p>
-
-            {displayOtp && (
-              <div className="otp-display">
-                <p className="otp-display-label">Your OTP Code:</p>
-                <p className="otp-display-code">{displayOtp}</p>
-                <p className="otp-display-note">
-                  SMS/Email service not configured. Use this code to verify.
-                </p>
-              </div>
-            )}
+            <h2 className="step-title">Enter your date of birth</h2>
+            <p className="step-description">You must be at least 13 years old</p>
 
             <div className="form-group">
-              <label className="form-label">Verification Code</label>
+              <label className="form-label">Date of Birth</label>
               <input
-                type="text"
+                type="date"
                 className="form-input"
-                value={signupData.verificationCode}
+                value={signupData.dateOfBirth}
                 onChange={(e) =>
-                  setSignupData({
-                    ...signupData,
-                    verificationCode: e.target.value,
-                  })
+                  setSignupData({ ...signupData, dateOfBirth: e.target.value })
                 }
-                placeholder="Enter 6-digit code"
-                maxLength={6}
+                max={new Date().toISOString().split("T")[0]}
                 autoFocus
               />
-            </div>
-
-            <div className="verification-timer">
-              {timer > 0 ? (
-                <p className="timer-text">Time remaining: {formatTime(timer)}</p>
-              ) : (
-                <button
-                  type="button"
-                  className="resend-btn"
-                  onClick={handleResendCode}
-                  disabled={!canResend}
-                >
-                  Resend Code
-                </button>
-              )}
             </div>
 
             <div className="step-actions">
@@ -518,9 +398,8 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
                 type="button"
                 className="btn btn-primary"
                 onClick={handleNext}
-                disabled={loading}
               >
-                {loading ? "Verifying..." : "Verify"}
+                Next
               </button>
             </div>
           </div>
@@ -528,77 +407,21 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
 
         {step === 4 && (
           <div className="signup-step">
-            <h2 className="step-title">Create a password</h2>
-            <p className="step-description">Must be at least 8 characters</p>
+            <h2 className="step-title">What's your name?</h2>
+            <p className="step-description">Enter your full name</p>
 
             <div className="form-group">
-              <label className="form-label">Password</label>
-              <div className="password-input-wrapper">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  className="form-input"
-                  value={signupData.password}
-                  onChange={(e) =>
-                    setSignupData({ ...signupData, password: e.target.value })
-                  }
-                  placeholder="Create password"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff /> : <Eye />}
-                </button>
-              </div>
-              {signupData.password && (
-                <div className="password-strength">
-                  <div className="strength-bars">
-                    {[...Array(5)].map((_, i) => (
-                      <div
-                        key={i}
-                        className="strength-bar"
-                        style={{
-                          backgroundColor:
-                            i < passwordStrength ? strengthInfo.color : "#e0e0e0",
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span
-                    className="strength-text"
-                    style={{ color: strengthInfo.color }}
-                  >
-                    {strengthInfo.label}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Confirm Password</label>
-              <div className="password-input-wrapper">
-                <input
-                  type={showConfirmPassword ? "text" : "password"}
-                  className="form-input"
-                  value={signupData.confirmPassword}
-                  onChange={(e) =>
-                    setSignupData({
-                      ...signupData,
-                      confirmPassword: e.target.value,
-                    })
-                  }
-                  placeholder="Confirm password"
-                />
-                <button
-                  type="button"
-                  className="password-toggle"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                >
-                  {showConfirmPassword ? <EyeOff /> : <Eye />}
-                </button>
-              </div>
+              <label className="form-label">Full Name</label>
+              <input
+                type="text"
+                className="form-input"
+                value={signupData.fullName}
+                onChange={(e) =>
+                  setSignupData({ ...signupData, fullName: e.target.value })
+                }
+                placeholder="John Doe"
+                autoFocus
+              />
             </div>
 
             <div className="step-actions">
@@ -622,133 +445,31 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
 
         {step === 5 && (
           <div className="signup-step">
-            <h2 className="step-title">When's your birthday?</h2>
-            <p className="step-description">You must be at least 13 years old</p>
-
-            <div className="form-group">
-              <label className="form-label">Date of Birth</label>
-              <input
-                type="date"
-                className="form-input"
-                value={signupData.dateOfBirth}
-                onChange={(e) =>
-                  setSignupData({ ...signupData, dateOfBirth: e.target.value })
-                }
-                max={new Date().toISOString().split("T")[0]}
-                autoFocus
-              />
-            </div>
-
-            {signupData.dateOfBirth && (
-              <div className="age-display">
-                <p>Your age: {calculateAge(signupData.dateOfBirth)} years old</p>
-              </div>
-            )}
-
-            <div className="step-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleBack}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleNext}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 6 && (
-          <div className="signup-step">
-            <h2 className="step-title">What's your name?</h2>
-            <p className="step-description">Enter your full name</p>
-
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input
-                type="text"
-                className="form-input"
-                value={signupData.fullName}
-                onChange={(e) =>
-                  setSignupData({ ...signupData, fullName: e.target.value })
-                }
-                placeholder="John Doe"
-                maxLength={100}
-                autoFocus
-              />
-              <p className="char-count">
-                {signupData.fullName.length} / 100 characters
-              </p>
-            </div>
-
-            <div className="step-actions">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={handleBack}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleNext}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 7 && (
-          <div className="signup-step">
             <h2 className="step-title">Choose a username</h2>
             <p className="step-description">
-              3-20 characters, letters, numbers and underscores only
+              This is how others will see you
             </p>
 
             <div className="form-group">
               <label className="form-label">Username</label>
-              <div className="username-input-wrapper">
-                <input
-                  type="text"
-                  className={`form-input ${
-                    usernameAvailable === true
-                      ? "success"
-                      : usernameAvailable === false
-                      ? "error"
-                      : ""
-                  }`}
-                  value={signupData.username}
-                  onChange={(e) =>
-                    setSignupData({ ...signupData, username: e.target.value })
-                  }
-                  placeholder="johndoe"
-                  maxLength={20}
-                  autoFocus
-                />
-                {usernameChecking && (
-                  <div className="username-checking">
-                    <div className="spinner-small"></div>
-                  </div>
-                )}
-                {!usernameChecking && usernameAvailable === true && (
-                  <div className="username-available">
-                    <Check />
-                  </div>
-                )}
-              </div>
-              {usernameAvailable === false && (
-                <p className="form-error">Username already taken</p>
+              <input
+                type="text"
+                className="form-input"
+                value={signupData.username}
+                onChange={(e) =>
+                  setSignupData({ ...signupData, username: e.target.value })
+                }
+                placeholder="johndoe"
+                autoFocus
+              />
+              {usernameChecking && (
+                <p className="username-status checking">Checking...</p>
               )}
-              {usernameAvailable === true && (
-                <p className="form-success">Username available</p>
+              {!usernameChecking && usernameAvailable === true && (
+                <p className="username-status available">Username available</p>
+              )}
+              {!usernameChecking && usernameAvailable === false && (
+                <p className="username-status taken">Username taken</p>
               )}
             </div>
 
@@ -766,7 +487,7 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
                 onClick={handleFinish}
                 disabled={loading || !usernameAvailable}
               >
-                {loading ? "Creating Account..." : "Finish"}
+                {loading ? "Creating Account..." : "Create Account"}
               </button>
             </div>
           </div>
