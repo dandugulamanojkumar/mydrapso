@@ -4,10 +4,10 @@ import { shuffleArray } from '../utils/videoUtils';
 export function PageShorts({
   uploads,
   currentUser,
-  likes,
-  setLikes,
-  follows,
-  setFollows,
+  likedVideoIds = [],
+  followingList = [],
+  onLike,
+  onFollow,
   onUsernameClick
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -115,22 +115,6 @@ export function PageShorts({
     };
   }, [currentIndex, videoHistory, uploads]);
 
-  const toggleLike = (id) => {
-    setLikes((prev) => prev.includes(id) ? prev.filter((vid) => vid !== id) : [...prev, id]);
-  };
-
-  const toggleFollow = (uid) => {
-    setFollows((prev) => {
-      const copy = { ...prev };
-      if (!copy[uid]) copy[uid] = [];
-      if (copy[uid].includes(currentUser.id)) {
-        copy[uid] = copy[uid].filter((id) => id !== currentUser.id);
-      } else {
-        copy[uid].push(currentUser.id);
-      }
-      return copy;
-    });
-  };
 
   const openComments = (videoId) => {
     alert(`Comments for video ${videoId} - Feature coming soon!`);
@@ -156,19 +140,20 @@ export function PageShorts({
 
   const renderActionButtons = (video) => {
     const buttons = [];
+    const isLiked = likedVideoIds.includes(video.id);
 
     buttons.push(
-      <div key="like" className="clickz-action-btn" onClick={() => toggleLike(video.id)}>
-        <svg className="action-icon" viewBox="0 0 24 24" fill={likes.includes(video.id) ? "currentColor" : "none"} stroke="currentColor">
+      <div key="like" className="shorts-action-btn" onClick={() => onLike && onLike(video.id)}>
+        <svg className="action-icon" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor">
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
-        <span>{likes.filter(id => id === video.id).length}</span>
+        <span>{video.likes || 0}</span>
       </div>
     );
 
     if (video.hasAffiliate) {
       buttons.push(
-        <div key="cart" className="clickz-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
+        <div key="cart" className="shorts-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
           <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <circle cx="9" cy="21" r="1"/>
             <circle cx="20" cy="21" r="1"/>
@@ -183,7 +168,7 @@ export function PageShorts({
       buttons.push(
         <div
           key="location"
-          className="clickz-action-btn"
+          className="shorts-action-btn"
           onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(video.location || '')}`, "_blank")}
         >
           <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -196,7 +181,7 @@ export function PageShorts({
     }
 
     buttons.push(
-      <div key="comment" className="clickz-action-btn" onClick={() => openComments(video.id)}>
+      <div key="comment" className="shorts-action-btn" onClick={() => openComments(video.id)}>
         <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
@@ -205,7 +190,7 @@ export function PageShorts({
     );
 
     buttons.push(
-      <div key="share" className="clickz-action-btn" onClick={() => shareVideo(video)}>
+      <div key="share" className="shorts-action-btn" onClick={() => shareVideo(video)}>
         <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
           <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
           <polyline points="16 6 12 2 8 6"/>
@@ -246,14 +231,14 @@ export function PageShorts({
           {renderActionButtons(currentVideo)}
         </div>
 
-        <div className="clickz-profile">
-          <img src={currentUser.avatar} alt="Profile" />
+        <div className="shorts-profile">
+          <img src={currentVideo.user?.avatar || currentUser?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} alt="Profile" />
           <div>
             <div
-              className="clickz-username clickz-username-clickable"
+              className="shorts-username shorts-username-clickable"
               onClick={() => onUsernameClick && onUsernameClick(currentVideo.userId)}
             >
-              @{currentUser.name}
+              @{currentVideo.user?.username || currentUser?.name || 'Unknown'}
             </div>
             <div style={{ fontSize: '14px', marginTop: '4px', opacity: 0.8 }}>
               {currentVideo.title}
@@ -262,12 +247,12 @@ export function PageShorts({
               {currentVideo.desc}
             </div>
           </div>
-          {currentVideo.userId !== currentUser.id && (
+          {currentVideo.userId !== currentUser?.id && (
             <button
-              className={`follow-btn ${follows[currentVideo.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
-              onClick={() => toggleFollow(currentVideo.userId)}
+              className={`follow-btn ${followingList.includes(currentVideo.userId) ? 'followed' : ''}`}
+              onClick={() => onFollow && onFollow(currentVideo.userId)}
             >
-              {follows[currentVideo.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
+              {followingList.includes(currentVideo.userId) ? "Following" : "Follow"}
             </button>
           )}
         </div>
