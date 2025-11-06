@@ -16,6 +16,23 @@ export const likeVideo = async (videoId, userId) => {
     throw error;
   }
 
+  if (data) {
+    const { data: video } = await supabase
+      .from("videos")
+      .select("user_id")
+      .eq("id", videoId)
+      .single();
+
+    if (video && video.user_id !== userId) {
+      await supabase.from("notifications").insert([{
+        user_id: video.user_id,
+        actor_id: userId,
+        type: "like",
+        video_id: videoId
+      }]);
+    }
+  }
+
   return data;
 };
 
