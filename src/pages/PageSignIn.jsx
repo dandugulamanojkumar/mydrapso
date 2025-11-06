@@ -9,7 +9,7 @@ const supabase = createClient(
 );
 
 export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,37 +18,46 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
     e.preventDefault();
     setError("");
 
-    if (!identifier.trim() || !password) {
+    if (!email.trim() || !password) {
       setError("Please fill in all fields");
+      return;
+    }
+
+    if (!email.includes('@')) {
+      setError("Please enter a valid email address");
       return;
     }
 
     setLoading(true);
 
     try {
-      const passwordHash = CryptoJS.SHA256(password).toString();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password,
+      });
 
-      const { data: users, error: queryError } = await supabase
-        .from("users")
-        .select("*")
-        .or(
-          `username.eq.${identifier},email.eq.${identifier},mobile_number.eq.${identifier}`
-        )
-        .eq("password_hash", passwordHash)
-        .maybeSingle();
-
-      if (queryError) {
-        throw queryError;
+      if (authError) {
+        throw authError;
       }
 
-      if (!users) {
+      if (!data.user) {
         setError("Invalid credentials");
         setLoading(false);
         return;
       }
 
-      localStorage.setItem("userData", JSON.stringify(users));
-      onSignInSuccess(users);
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
+      if (userError || !userData) {
+        throw userError || new Error("User data not found");
+      }
+
+      localStorage.setItem("userData", JSON.stringify(userData));
+      onSignInSuccess(userData);
     } catch (err) {
       console.error("Sign in error:", err);
       setError("An error occurred. Please try again.");
@@ -68,14 +77,14 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
-            <label className="form-label">Username / Email / Mobile Number</label>
+            <label className="form-label">Email</label>
             <div style={{ position: "relative" }}>
               <input
-                type="text"
+                type="email"
                 className="form-input"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="Enter your username, email or mobile"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
                 disabled={loading}
                 autoFocus
               />

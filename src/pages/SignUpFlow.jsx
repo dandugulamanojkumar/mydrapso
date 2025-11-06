@@ -211,21 +211,39 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
     setLoading(true);
 
     try {
-      const passwordHash = CryptoJS.SHA256(signupData.password).toString();
       const avatarSeed = signupData.username || "default";
+
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: signupData.email,
+        password: signupData.password,
+        options: {
+          data: {
+            username: signupData.username,
+            full_name: signupData.fullName,
+            date_of_birth: signupData.dateOfBirth,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`,
+          }
+        }
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (!authData.user) {
+        throw new Error("User creation failed");
+      }
 
       const { data, error: insertError } = await supabase
         .from("users")
         .insert([
           {
+            id: authData.user.id,
             username: signupData.username,
-            email: signupData.method === "email" ? signupData.email : null,
-            mobile_number:
-              signupData.method === "mobile" ? signupData.mobileNumber : null,
-            password_hash: passwordHash,
+            email: signupData.email,
             full_name: signupData.fullName,
             date_of_birth: signupData.dateOfBirth,
-            signup_method: signupData.method,
+            signup_method: "email",
             is_verified: true,
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${avatarSeed}`,
           },
@@ -246,11 +264,11 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
           setError("Username already exists");
         } else if (err.message.includes("email")) {
           setError("Email already registered");
-        } else if (err.message.includes("mobile")) {
-          setError("Mobile number already registered");
         }
+      } else if (err.message.includes("User already registered")) {
+        setError("Email already registered");
       } else {
-        setError("An error occurred. Please try again.");
+        setError(err.message || "An error occurred. Please try again.");
       }
       setLoading(false);
     }
