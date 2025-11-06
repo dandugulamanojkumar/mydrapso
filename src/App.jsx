@@ -21,7 +21,9 @@ import {
   likeVideo,
   unlikeVideo,
   followUser,
-  unfollowUser
+  unfollowUser,
+  uploadVideo,
+  subscribeToVideos
 } from "./lib/supabase";
 import "./styles.css";
 
@@ -311,6 +313,63 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (!isLoggedIn || !profile) return;
+
+    const unsubscribe = subscribeToVideos(async (payload) => {
+      if (payload.eventType === 'INSERT') {
+        const newVideo = payload.new;
+
+        const { data: userData } = await supabase
+          .from('users')
+          .select('id, username, avatar, full_name')
+          .eq('id', newVideo.user_id)
+          .single();
+
+        const formattedVideo = {
+          id: newVideo.id,
+          url: newVideo.video_url,
+          name: newVideo.title,
+          duration: newVideo.duration,
+          title: newVideo.title,
+          desc: newVideo.description,
+          hasAffiliate: newVideo.has_affiliate,
+          affiliateLink: newVideo.affiliate_link,
+          hasLocation: newVideo.has_location,
+          location: newVideo.location,
+          userId: newVideo.user_id,
+          likes: newVideo.likes || 0,
+          views: newVideo.views || 0,
+          user: userData,
+        };
+
+        setUploads(prev => {
+          if (prev.some(v => v.id === formattedVideo.id)) {
+            return prev;
+          }
+          return [formattedVideo, ...prev];
+        });
+      } else if (payload.eventType === 'DELETE') {
+        setUploads(prev => prev.filter(v => v.id !== payload.old.id));
+      } else if (payload.eventType === 'UPDATE') {
+        setUploads(prev => prev.map(v => {
+          if (v.id === payload.new.id) {
+            return {
+              ...v,
+              likes: payload.new.likes,
+              views: payload.new.views,
+            };
+          }
+          return v;
+        }));
+      }
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [isLoggedIn, profile]);
+
   const handleSignInSuccess = async (userData) => {
     setIsLoggedIn(true);
     setProfile({
@@ -347,39 +406,42 @@ export default function App() {
       return;
     }
 
-    try {
-      const { data, error } = await supabase
-        .from("videos")
-        .insert([{
-          user_id: profile.id,
-          title: title.trim(),
-          description: desc.trim(),
-          video_url: videoMeta.url,
-          duration: Math.floor(videoMeta.duration),
-          has_affiliate: !!showAffiliate,
-          affiliate_link: showAffiliate ? affiliateLink.trim() : null,
-          has_location: !!showLocation,
-          location: showLocation ? locationText.trim() : null,
-        }])
-        .select()
-        .single();
+    const uploadButton = e.target.querySelector('button[type="submit"]');
+    if (uploadButton) {
+      uploadButton.disabled = true;
+      uploadButton.textContent = 'Uploading...';
+    }
 
-      if (error) throw error;
+    try {
+      const metadata = {
+        title: title.trim(),
+        description: desc.trim(),
+        duration: Math.floor(videoMeta.duration),
+        hasAffiliate: !!showAffiliate,
+        affiliateLink: showAffiliate ? affiliateLink.trim() : null,
+        hasLocation: !!showLocation,
+        location: showLocation ? locationText.trim() : null,
+      };
+
+      const video = await uploadVideo(profile.id, videoMeta.file, metadata);
 
       const record = {
-        id: data.id,
-        url: videoMeta.url,
+        id: video.id,
+        url: video.video_url,
         name: videoMeta.file.name,
-        duration: videoMeta.duration,
-        title: data.title,
-        desc: data.description,
-        hasAffiliate: data.has_affiliate,
-        affiliateLink: data.affiliate_link,
-        hasLocation: data.has_location,
-        location: data.location,
-        userId: profile.id,
-        likes: 0,
+        duration: video.duration,
+        title: video.title,
+        desc: video.description,
+        hasAffiliate: video.has_affiliate,
+        affiliateLink: video.affiliate_link,
+        hasLocation: video.has_location,
+        location: video.location,
+        userId: video.user_id,
+        user: video.user,
+        likes: video.likes || 0,
+        views: video.views || 0,
       };
+
       setUploads((prev) => [record, ...prev]);
       setShowModal(false);
       setStep(1);
@@ -391,10 +453,15 @@ export default function App() {
       setShowLocation(false);
       setLocationText("");
       if (fileInputRef.current) fileInputRef.current.value = "";
+      URL.revokeObjectURL(videoMeta.url);
       setActivePage("videos");
     } catch (error) {
       console.error("Upload error:", error);
-      alert("Failed to upload video. Please try again.");
+      alert(error.message || "Failed to upload video. Please try again.");
+      if (uploadButton) {
+        uploadButton.disabled = false;
+        uploadButton.textContent = 'Upload';
+      }
     }
   };
 
@@ -433,7 +500,16 @@ export default function App() {
         setActivePage={setActivePage}
       />
       <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`} id="main-content">
-        <div className="loaded-page">{pages[activePage] || <EmptyPage />}</div>
+        <div className="loaded-page">
+          {videosLoading ? (
+            <div className="loading-container">
+              <div className="loading-spinner"></div>
+              <p>Loading videos...</p>
+            </div>
+          ) : (
+            pages[activePage] || <EmptyPage />
+          )}
+        </div>
       </main>
       {showInlinePlayer && selectedVideo && (
         <InlineVideoPlayer

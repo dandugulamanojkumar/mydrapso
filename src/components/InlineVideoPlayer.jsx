@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { shuffleArray } from '../utils/videoUtils';
 import { CommentsPanel } from './CommentsPanel';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ShoppingCart, X } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
+import { getVideoProducts } from '../lib/supabase';
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -25,6 +26,9 @@ export function InlineVideoPlayer({
   const [videoHistory, setVideoHistory] = useState([]);
   const [showComments, setShowComments] = useState(false);
   const [commentCounts, setCommentCounts] = useState({});
+  const [showProducts, setShowProducts] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -187,8 +191,32 @@ export function InlineVideoPlayer({
   useEffect(() => {
     if (currentVideo) {
       loadCommentCount(currentVideo.id);
+      if (currentVideo.hasAffiliate) {
+        loadProducts(currentVideo.id);
+      }
     }
   }, [currentVideo]);
+
+  const loadProducts = async (videoId) => {
+    setLoadingProducts(true);
+    try {
+      const productData = await getVideoProducts(videoId);
+      setProducts(productData);
+    } catch (error) {
+      console.error('Load products error:', error);
+      setProducts([]);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const openProductCart = () => {
+    setShowProducts(true);
+  };
+
+  const closeProductCart = () => {
+    setShowProducts(false);
+  };
 
   const shareVideo = (video) => {
     const shareData = {
@@ -220,7 +248,7 @@ export function InlineVideoPlayer({
 
     if (video.hasAffiliate) {
       buttons.push(
-        <div key="cart" className="inline-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
+        <div key="cart" className="inline-action-btn" onClick={openProductCart}>
           <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <circle cx="9" cy="21" r="1"/>
             <circle cx="20" cy="21" r="1"/>
@@ -331,6 +359,52 @@ export function InlineVideoPlayer({
           currentUser={currentUser}
           onClose={closeComments}
         />
+      )}
+
+      {showProducts && (
+        <div className="products-cart-overlay" onClick={(e) => e.target.classList.contains('products-cart-overlay') && closeProductCart()}>
+          <div className="products-cart">
+            <div className="products-cart-header">
+              <h3>Products</h3>
+              <button className="close-cart-btn" onClick={closeProductCart}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="products-cart-content">
+              {loadingProducts ? (
+                <div className="products-loading">Loading products...</div>
+              ) : products.length > 0 ? (
+                products.map(product => (
+                  <div key={product.id} className="product-item" onClick={() => window.open(product.product_url, '_blank')}>
+                    {product.image_url && (
+                      <img src={product.image_url} alt={product.name} className="product-image" />
+                    )}
+                    <div className="product-info">
+                      <h4 className="product-name">{product.name}</h4>
+                      {product.description && <p className="product-description">{product.description}</p>}
+                      {product.price && <p className="product-price">{product.price}</p>}
+                    </div>
+                    <div className="product-action">
+                      <ShoppingCart size={20} />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="no-products">
+                  <p>No products available for this video.</p>
+                  {currentVideo.affiliateLink && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => window.open(currentVideo.affiliateLink, '_blank')}
+                    >
+                      Visit Affiliate Link
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

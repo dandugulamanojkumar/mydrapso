@@ -309,3 +309,101 @@ export const uploadProfilePicture = async (userId, file) => {
 
   return publicUrl;
 };
+
+export const uploadVideo = async (userId, videoFile, metadata) => {
+  const fileExt = videoFile.name.split('.').pop();
+  const fileName = `${userId}-${Date.now()}.${fileExt}`;
+  const filePath = `videos/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('videos')
+    .upload(filePath, videoFile, {
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (uploadError) {
+    if (uploadError.message.includes('Bucket not found')) {
+      throw new Error('Storage bucket not configured. Please create a "videos" bucket in Supabase Storage.');
+    }
+    throw uploadError;
+  }
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('videos')
+    .getPublicUrl(filePath);
+
+  const videoData = {
+    user_id: userId,
+    title: metadata.title,
+    description: metadata.description || '',
+    video_url: publicUrl,
+    duration: metadata.duration || 0,
+    has_affiliate: metadata.hasAffiliate || false,
+    affiliate_link: metadata.affiliateLink || null,
+    has_location: metadata.hasLocation || false,
+    location: metadata.location || null
+  };
+
+  const { data: video, error: insertError } = await supabase
+    .from('videos')
+    .insert([videoData])
+    .select(`
+      *,
+      user:user_id (
+        id,
+        username,
+        avatar,
+        full_name
+      )
+    `)
+    .single();
+
+  if (insertError) throw insertError;
+
+  if (metadata.products && metadata.products.length > 0) {
+    const products = metadata.products.map(product => ({
+      video_id: video.id,
+      name: product.name,
+      description: product.description || '',
+      price: product.price || '',
+      product_url: product.url,
+      image_url: product.imageUrl || ''
+    }));
+
+    await supabase.from('products').insert(products);
+  }
+
+  return video;
+};
+
+export const getVideoProducts = async (videoId) => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*')
+    .eq('video_id', videoId);
+
+  if (error) throw error;
+  return data || [];
+};
+
+export const subscribeToVideos = (callback) => {
+  const channel = supabase
+    .channel('videos-channel')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'videos'
+      },
+      (payload) => {
+        callback(payload);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+};
