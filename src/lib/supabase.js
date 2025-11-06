@@ -281,3 +281,31 @@ export const updateUserProfile = async (userId, updates) => {
   if (error) throw error;
   return data;
 };
+
+export const uploadProfilePicture = async (userId, file) => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${userId}-${Date.now()}.${fileExt}`;
+  const filePath = `avatars/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('profile-pictures')
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false
+    });
+
+  if (uploadError) {
+    if (uploadError.message.includes('Bucket not found')) {
+      throw new Error('Storage bucket not configured. Please create a "profile-pictures" bucket in Supabase Storage.');
+    }
+    throw uploadError;
+  }
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('profile-pictures')
+    .getPublicUrl(filePath);
+
+  await updateUserProfile(userId, { avatar: publicUrl });
+
+  return publicUrl;
+};

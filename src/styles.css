@@ -1019,11 +1019,31 @@ body {
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-.edit-modal h3 { margin-bottom: 12px; }
+.edit-modal h3 { margin-bottom: 12px; color: var(--text); }
 .edit-field { margin-bottom: 14px; }
-.edit-field input[type="text"], .edit-field input[type="file"] { margin-top: 6px; width: 100%; }
+.edit-field label { color: var(--text); font-weight: 600; display: block; margin-bottom: 8px; }
+.edit-field input[type="text"], .edit-field input[type="file"], .edit-field textarea {
+  margin-top: 6px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+  color: var(--text);
+  font-size: 14px;
+}
+.edit-field input:focus, .edit-field textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.edit-field small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  display: block;
+  margin-top: 4px;
+}
 .preview-pic { display: block; margin-top: 8px; width: 70px; height: 70px; border-radius: 50%; object-fit: cover; }
-.edit-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.edit-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 
 /* ===== PROFILE STATS ===== */
 .profile-stats { display: flex; justify-content: center; gap: 40px; margin: 15px 0; }
@@ -2512,8 +2532,8 @@ body {
 
 .action-btn-small {
   flex: 1;
-  background: transparent;
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 8px;
   cursor: pointer;

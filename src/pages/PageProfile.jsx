@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { updateUserProfile } from '../lib/supabase';
+import { updateUserProfile, uploadProfilePicture } from '../lib/supabase';
 
 export function PageProfile({
   uploads = [],
@@ -21,30 +21,67 @@ export function PageProfile({
   const [isEditing, setIsEditing] = useState(false);
   const [tempName, setTempName] = useState(profile.name);
   const [tempBio, setTempBio] = useState(profile.bio || '');
+  const [tempAvatar, setTempAvatar] = useState(profile.avatar);
+  const [avatarFile, setAvatarFile] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert('File size should be less than 5MB');
+        return;
+      }
+      setAvatarFile(file);
+      setTempAvatar(URL.createObjectURL(file));
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
+      let newAvatarUrl = profile.avatar;
+
+      if (avatarFile) {
+        setUploading(true);
+        try {
+          newAvatarUrl = await uploadProfilePicture(profile.id, avatarFile);
+        } catch (uploadError) {
+          console.error('Upload avatar error:', uploadError);
+          alert(uploadError.message || 'Failed to upload profile picture. Please try again.');
+          setUploading(false);
+          return;
+        }
+        setUploading(false);
+      }
+
       const updates = {
         full_name: tempName,
         bio: tempBio
       };
 
-      const updatedUser = await updateUserProfile(profile.id, updates);
+      if (avatarFile) {
+        updates.avatar = newAvatarUrl;
+      }
+
+      await updateUserProfile(profile.id, updates);
 
       setProfile({
         ...profile,
         name: tempName,
-        bio: tempBio
+        bio: tempBio,
+        avatar: newAvatarUrl
       });
 
       localStorage.setItem("userData", JSON.stringify({
         ...JSON.parse(localStorage.getItem("userData") || "{}"),
         full_name: tempName,
-        bio: tempBio
+        bio: tempBio,
+        avatar: newAvatarUrl
       }));
 
+      setAvatarFile(null);
       setIsEditing(false);
     } catch (error) {
       console.error('Update profile error:', error);
@@ -57,6 +94,8 @@ export function PageProfile({
   const handleCancel = () => {
     setTempName(profile.name);
     setTempBio(profile.bio || '');
+    setTempAvatar(profile.avatar);
+    setAvatarFile(null);
     setIsEditing(false);
   };
 
@@ -108,6 +147,19 @@ export function PageProfile({
           <div className="edit-content">
             <h3>Edit Profile</h3>
             <div className="edit-field">
+              <label>Profile Picture:</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <img src={tempAvatar} alt="Preview" className="preview-pic" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleAvatarChange}
+                  style={{ flex: 1 }}
+                />
+              </div>
+              <small>Maximum file size: 5MB. Supported formats: JPG, PNG, GIF</small>
+            </div>
+            <div className="edit-field">
               <label>Display Name:</label>
               <input
                 type="text"
@@ -131,9 +183,9 @@ export function PageProfile({
               <button
                 className="btn btn-primary"
                 onClick={handleSave}
-                disabled={saving}
+                disabled={saving || uploading}
               >
-                {saving ? 'Saving...' : 'Save'}
+                {uploading ? 'Uploading...' : saving ? 'Saving...' : 'Save'}
               </button>
               <button
                 className="btn btn-ghost"
