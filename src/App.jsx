@@ -256,25 +256,65 @@ export default function App() {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
 
-      if (session) {
-        const userData = localStorage.getItem("userData");
-        if (userData) {
-          const user = JSON.parse(userData);
+      if (session?.user) {
+        const { data: userData, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (!error && userData) {
+          localStorage.setItem("userData", JSON.stringify(userData));
           setIsLoggedIn(true);
           setProfile({
-            id: user.id,
-            name: user.username || user.full_name,
-            avatar: user.avatar || "https://i.pravatar.cc/50?img=3",
-            bio: user.bio || "",
-            followerCount: user.follower_count || 0,
-            followingCount: user.following_count || 0,
+            id: userData.id,
+            name: userData.username || userData.full_name,
+            avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
+            bio: userData.bio || "",
+            followerCount: userData.follower_count || 0,
+            followingCount: userData.following_count || 0,
           });
-          await loadInitialData(user.id);
+          await loadInitialData(userData.id);
         }
       }
     };
 
     checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (userData) {
+          localStorage.setItem("userData", JSON.stringify(userData));
+          setIsLoggedIn(true);
+          setProfile({
+            id: userData.id,
+            name: userData.username || userData.full_name,
+            avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
+            bio: userData.bio || "",
+            followerCount: userData.follower_count || 0,
+            followingCount: userData.following_count || 0,
+          });
+          await loadInitialData(userData.id);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem("userData");
+        setIsLoggedIn(false);
+        setProfile(null);
+        setUploads([]);
+        setLikedVideoIds([]);
+        setFollowingList([]);
+      }
+    });
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const loadInitialData = async (userId) => {

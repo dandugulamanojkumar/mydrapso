@@ -9,7 +9,7 @@ const supabase = createClient(
 );
 
 export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
-  const [email, setEmail] = useState("");
+  const [emailOrUsername, setEmailOrUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,30 +18,45 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
     e.preventDefault();
     setError("");
 
-    if (!email.trim() || !password) {
+    if (!emailOrUsername.trim() || !password) {
       setError("Please fill in all fields");
-      return;
-    }
-
-    if (!email.includes('@')) {
-      setError("Please enter a valid email address");
       return;
     }
 
     setLoading(true);
 
     try {
+      let loginEmail = emailOrUsername.trim();
+
+      if (!emailOrUsername.includes('@')) {
+        const { data: userData, error: userError } = await supabase
+          .from("users")
+          .select("email")
+          .eq("username", emailOrUsername.trim())
+          .maybeSingle();
+
+        if (userError || !userData) {
+          setError("Invalid email/username or password");
+          setLoading(false);
+          return;
+        }
+
+        loginEmail = userData.email;
+      }
+
       const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: loginEmail,
         password: password,
       });
 
       if (authError) {
-        throw authError;
+        setError("Invalid email/username or password");
+        setLoading(false);
+        return;
       }
 
       if (!data.user) {
-        setError("Invalid credentials");
+        setError("Invalid email/username or password");
         setLoading(false);
         return;
       }
@@ -60,7 +75,7 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
       onSignInSuccess(userData);
     } catch (err) {
       console.error("Sign in error:", err);
-      setError("An error occurred. Please try again.");
+      setError("Invalid email/username or password");
       setLoading(false);
     }
   };
@@ -77,14 +92,14 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
 
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label">Email or Username</label>
             <div style={{ position: "relative" }}>
               <input
-                type="email"
+                type="text"
                 className="form-input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
+                value={emailOrUsername}
+                onChange={(e) => setEmailOrUsername(e.target.value)}
+                placeholder="Enter your email or username"
                 disabled={loading}
                 autoFocus
               />
