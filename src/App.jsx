@@ -23,7 +23,8 @@ import {
   followUser,
   unfollowUser,
   uploadVideo,
-  subscribeToVideos
+  subscribeToVideos,
+  incrementVideoViews
 } from "./lib/supabase";
 import "./styles.css";
 
@@ -42,6 +43,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [followingList, setFollowingList] = useState([]);
   const [likedVideoIds, setLikedVideoIds] = useState([]);
+  const [viewedVideoIds, setViewedVideoIds] = useState([]);
 
   /* ===== UPLOAD STATE ===== */
   const [showModal, setShowModal] = useState(false);
@@ -82,11 +84,21 @@ export default function App() {
   };
 
   /* ===== INLINE VIDEO PLAYER FUNCTIONS ===== */
-  const openInlinePlayer = (videoId) => {
+  const openInlinePlayer = async (videoId) => {
     const video = uploads.find(v => v.id === videoId);
     if (video) {
       setSelectedVideo(video);
       setShowInlinePlayer(true);
+
+      if (!viewedVideoIds.includes(videoId)) {
+        await incrementVideoViews(videoId);
+        setViewedVideoIds(prev => [...prev, videoId]);
+        setUploads(prevUploads =>
+          prevUploads.map(v =>
+            v.id === videoId ? { ...v, views: v.views + 1 } : v
+          )
+        );
+      }
     }
   };
 
@@ -158,9 +170,21 @@ export default function App() {
       if (isFollowing) {
         await unfollowUser(profile.id, userId);
         setFollowingList(prev => prev.filter(id => id !== userId));
+        setProfile(prev => ({ ...prev, following_count: prev.following_count - 1 }));
+        setUploads(prev => prev.map(v =>
+          v.userId === userId && v.users?.[0]
+            ? { ...v, users: [{ ...v.users[0], follower_count: v.users[0].follower_count - 1 }] }
+            : v
+        ));
       } else {
         await followUser(profile.id, userId);
         setFollowingList(prev => [...prev, userId]);
+        setProfile(prev => ({ ...prev, following_count: prev.following_count + 1 }));
+        setUploads(prev => prev.map(v =>
+          v.userId === userId && v.users?.[0]
+            ? { ...v, users: [{ ...v.users[0], follower_count: v.users[0].follower_count + 1 }] }
+            : v
+        ));
       }
     } catch (error) {
       console.error("Toggle follow error:", error);
@@ -557,11 +581,12 @@ export default function App() {
           allVideos={uploads}
           onClose={closeInlinePlayer}
           currentUser={profile}
-          likes={likes}
-          setLikes={setLikes}
-          follows={follows}
-          setFollows={setFollows}
+          likedVideoIds={likedVideoIds}
+          followingList={followingList}
+          onLike={toggleLike}
+          onFollow={toggleFollow}
           onUsernameClick={handleUserClick}
+          setUploads={setUploads}
         />
       )}
       {showSearchResults && (
@@ -572,7 +597,7 @@ export default function App() {
           onVideoClick={handleVideoClick}
           onClose={() => setShowSearchResults(false)}
           currentUser={profile}
-          follows={follows}
+          followingList={followingList}
           toggleFollow={toggleFollow}
         />
       )}

@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { X, Send } from 'lucide-react';
+import { addComment, getVideoComments } from '../lib/supabase';
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-
-export function CommentsPanel({ videoId, currentUser, onClose }) {
+export function CommentsPanel({ videoId, currentUser, onClose, onCommentAdded }) {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
@@ -20,21 +15,7 @@ export function CommentsPanel({ videoId, currentUser, onClose }) {
   const loadComments = async () => {
     setLoading(true);
     try {
-      const { data: commentsData, error } = await supabase
-        .from('comments')
-        .select(`
-          *,
-          users:user_id (
-            username,
-            avatar,
-            full_name
-          )
-        `)
-        .eq('video_id', videoId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
+      const commentsData = await getVideoComments(videoId);
       setComments(commentsData || []);
     } catch (error) {
       console.error('Load comments error:', error);
@@ -49,27 +30,13 @@ export function CommentsPanel({ videoId, currentUser, onClose }) {
 
     setSubmitting(true);
     try {
-      const { data, error } = await supabase
-        .from('comments')
-        .insert([{
-          video_id: videoId,
-          user_id: currentUser.id,
-          comment_text: commentText.trim(),
-        }])
-        .select(`
-          *,
-          users:user_id (
-            username,
-            avatar,
-            full_name
-          )
-        `)
-        .single();
-
-      if (error) throw error;
-
+      const data = await addComment(videoId, currentUser.id, commentText.trim());
       setComments(prev => [data, ...prev]);
       setCommentText('');
+
+      if (onCommentAdded) {
+        onCommentAdded(videoId);
+      }
     } catch (error) {
       console.error('Submit comment error:', error);
       alert('Failed to post comment. Please try again.');

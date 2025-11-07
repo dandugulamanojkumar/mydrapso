@@ -15,11 +15,12 @@ export function InlineVideoPlayer({
   allVideos,
   onClose,
   currentUser,
-  likes,
-  setLikes,
-  follows,
-  setFollows,
-  onUsernameClick
+  likedVideoIds,
+  followingList,
+  onLike,
+  onFollow,
+  onUsernameClick,
+  setUploads
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [videoList, setVideoList] = useState([]);
@@ -147,21 +148,12 @@ export function InlineVideoPlayer({
     };
   }, [currentIndex, videoList, videoHistory, allVideos]);
 
-  const toggleLike = (id) => {
-    setLikes((prev) => prev.includes(id) ? prev.filter((vid) => vid !== id) : [...prev, id]);
+  const handleLike = (id) => {
+    if (onLike) onLike(id);
   };
 
-  const toggleFollow = (uid) => {
-    setFollows((prev) => {
-      const copy = { ...prev };
-      if (!copy[uid]) copy[uid] = [];
-      if (copy[uid].includes(currentUser.id)) {
-        copy[uid] = copy[uid].filter((id) => id !== currentUser.id);
-      } else {
-        copy[uid].push(currentUser.id);
-      }
-      return copy;
-    });
+  const handleFollow = (uid) => {
+    if (onFollow) onFollow(uid);
   };
 
   const openComments = (videoId) => {
@@ -237,12 +229,13 @@ export function InlineVideoPlayer({
   const renderActionButtons = (video) => {
     const buttons = [];
 
+    const isLiked = likedVideoIds.includes(video.id);
     buttons.push(
-      <div key="like" className="inline-action-btn" onClick={() => toggleLike(video.id)}>
-        <svg className="action-icon" viewBox="0 0 24 24" fill={likes.includes(video.id) ? "currentColor" : "none"} stroke="currentColor">
+      <div key="like" className="inline-action-btn" onClick={() => handleLike(video.id)}>
+        <svg className="action-icon" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor">
           <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
         </svg>
-        <span>{likes.filter(id => id === video.id).length}</span>
+        <span>{video.likes || 0}</span>
       </div>
     );
 
@@ -337,10 +330,10 @@ export function InlineVideoPlayer({
               </div>
               {currentVideo.userId !== currentUser.id && (
                 <button
-                  className={`follow-btn ${follows[currentVideo.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
-                  onClick={() => toggleFollow(currentVideo.userId)}
+                  className={`follow-btn ${followingList.includes(currentVideo.userId) ? 'followed' : ''}`}
+                  onClick={() => handleFollow(currentVideo.userId)}
                 >
-                  {follows[currentVideo.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
+                  {followingList.includes(currentVideo.userId) ? "Following" : "Follow"}
                 </button>
               )}
             </div>
@@ -358,6 +351,19 @@ export function InlineVideoPlayer({
           videoId={currentVideo.id}
           currentUser={currentUser}
           onClose={closeComments}
+          onCommentAdded={(videoId) => {
+            setCommentCounts(prev => ({
+              ...prev,
+              [videoId]: (prev[videoId] || 0) + 1
+            }));
+            if (setUploads) {
+              setUploads(prevUploads =>
+                prevUploads.map(v =>
+                  v.id === videoId ? { ...v, comments_count: (v.comments_count || 0) + 1 } : v
+                )
+              );
+            }
+          }}
         />
       )}
 

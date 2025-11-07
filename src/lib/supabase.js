@@ -17,6 +17,8 @@ export const likeVideo = async (videoId, userId) => {
   }
 
   if (data) {
+    await supabase.rpc('increment_video_likes', { video_id: videoId });
+
     const { data: video } = await supabase
       .from("videos")
       .select("user_id")
@@ -44,6 +46,8 @@ export const unlikeVideo = async (videoId, userId) => {
     .eq("user_id", userId);
 
   if (error) throw error;
+
+  await supabase.rpc('decrement_video_likes', { video_id: videoId });
 };
 
 export const checkIfLiked = async (videoId, userId) => {
@@ -80,6 +84,11 @@ export const followUser = async (followerId, followingId) => {
   }
 
   if (data) {
+    await supabase.rpc('increment_follower_counts', {
+      follower_user_id: followerId,
+      following_user_id: followingId
+    });
+
     await supabase.from("notifications").insert([{
       user_id: followingId,
       actor_id: followerId,
@@ -98,6 +107,11 @@ export const unfollowUser = async (followerId, followingId) => {
     .eq("following_id", followingId);
 
   if (error) throw error;
+
+  await supabase.rpc('decrement_follower_counts', {
+    follower_user_id: followerId,
+    following_user_id: followingId
+  });
 };
 
 export const checkIfFollowing = async (followerId, followingId) => {
@@ -141,6 +155,8 @@ export const addComment = async (videoId, userId, commentText) => {
     .single();
 
   if (error) throw error;
+
+  await supabase.rpc('increment_video_comments', { video_id: videoId });
 
   const { data: video } = await supabase
     .from("videos")
@@ -385,6 +401,10 @@ export const getVideoProducts = async (videoId) => {
 
   if (error) throw error;
   return data || [];
+};
+
+export const incrementVideoViews = async (videoId) => {
+  await supabase.rpc('increment_video_views', { video_id: videoId });
 };
 
 export const subscribeToVideos = (callback) => {

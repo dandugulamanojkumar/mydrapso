@@ -118,6 +118,7 @@ export function VideosFeed({
 
               <div className="video-grid-stats">
                 <span>{vid.likes || 0} likes</span>
+                <span>{vid.comments_count || 0} comments</span>
                 <span>{vid.views || 0} views</span>
               </div>
 
