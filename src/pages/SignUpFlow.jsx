@@ -167,11 +167,18 @@ export function SignUpFlow({ onSignUpComplete, onBackToSignIn }) {
         throw authError;
       }
 
-      if (!authData.user || !authData.session) {
-        throw new Error("User creation failed - no session established");
+      if (!authData.user) {
+        throw new Error("User creation failed");
       }
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      if (authData.session) {
+        await supabase.auth.setSession({
+          access_token: authData.session.access_token,
+          refresh_token: authData.session.refresh_token
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const { data, error: insertError } = await supabase
         .from("users")
