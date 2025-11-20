@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { Lock, User } from "lucide-react";
-import CryptoJS from "crypto-js";
 
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -28,7 +27,8 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
     try {
       let loginEmail = emailOrUsername.trim();
 
-      if (!emailOrUsername.includes('@')) {
+      // If user typed username instead of email
+      if (!emailOrUsername.includes("@")) {
         const { data: userData, error: userError } = await supabase
           .from("users")
           .select("email")
@@ -44,40 +44,36 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
         loginEmail = userData.email;
       }
 
+      // Login with email + password
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: password,
       });
 
-      if (authError) {
+      if (authError || !data.user) {
         setError("Invalid email/username or password");
         setLoading(false);
         return;
       }
 
-      if (!data.user) {
-        setError("Invalid email/username or password");
-        setLoading(false);
-        return;
-      }
+      // No second query — use auth user directly
+      const finalUser = {
+        id: data.user.id,
+        email: data.user.email,
+        username: data.user.user_metadata?.username || "",
+        full_name: data.user.user_metadata?.full_name || "",
+        avatar: data.user.user_metadata?.avatar || "",
+      };
 
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("id", data.user.id)
-        .maybeSingle();
+      localStorage.setItem("userData", JSON.stringify(finalUser));
 
-      if (userError || !userData) {
-        throw userError || new Error("User data not found");
-      }
-
-      localStorage.setItem("userData", JSON.stringify(userData));
-      onSignInSuccess(userData);
+      onSignInSuccess(finalUser);
     } catch (err) {
       console.error("Sign in error:", err);
       setError("Invalid email/username or password");
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
   return (
@@ -93,31 +89,27 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
             <label className="form-label">Email or Username</label>
-            <div style={{ position: "relative" }}>
-              <input
-                type="text"
-                className="form-input"
-                value={emailOrUsername}
-                onChange={(e) => setEmailOrUsername(e.target.value)}
-                placeholder="Enter your email or username"
-                disabled={loading}
-                autoFocus
-              />
-            </div>
+            <input
+              type="text"
+              className="form-input"
+              value={emailOrUsername}
+              onChange={(e) => setEmailOrUsername(e.target.value)}
+              placeholder="Enter your email or username"
+              disabled={loading}
+              autoFocus
+            />
           </div>
 
           <div className="form-group">
             <label className="form-label">Password</label>
-            <div style={{ position: "relative" }}>
-              <input
-                type="password"
-                className="form-input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                disabled={loading}
-              />
-            </div>
+            <input
+              type="password"
+              className="form-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              disabled={loading}
+            />
           </div>
 
           <button
@@ -146,3 +138,4 @@ export function PageSignIn({ onSignInSuccess, onSignUpClick }) {
     </div>
   );
 }
+
