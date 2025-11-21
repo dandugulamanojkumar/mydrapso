@@ -4,9 +4,10 @@ export function Topbar({ theme, setTheme, openModal, onSearch }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      onSearch(searchQuery.trim());
+    e && e.preventDefault();
+    const q = (searchQuery || "").trim();
+    if (q.length > 0) {
+      onSearch && onSearch(q);
     }
   };
 
@@ -20,7 +21,7 @@ export function Topbar({ theme, setTheme, openModal, onSearch }) {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
-        <button type="submit" className="search-btn">
+        <button type="submit" className="search-btn" title="Search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8"/>
             <path d="m21 21-4.35-4.35"/>
@@ -31,6 +32,7 @@ export function Topbar({ theme, setTheme, openModal, onSearch }) {
         <button
           className="icon-btn"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          title="Toggle theme"
         >
           {theme === "dark" ? (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -50,7 +52,7 @@ export function Topbar({ theme, setTheme, openModal, onSearch }) {
             </svg>
           )}
         </button>
-        <button className="icon-link" onClick={openModal}>
+        <button className="icon-link" onClick={openModal} title="Upload">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -60,3 +62,4 @@ export function Topbar({ theme, setTheme, openModal, onSearch }) {
     </header>
   );
 }
+
