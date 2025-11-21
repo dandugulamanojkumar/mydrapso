@@ -2,13 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { shuffleArray } from '../utils/videoUtils';
 import { CommentsPanel } from './CommentsPanel';
 import { ArrowLeft, ShoppingCart, X } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
 import { getVideoProducts } from '../lib/supabase';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from '../lib/supabase';
+import { FollowButton } from './FollowButton';
 
 export function InlineVideoPlayer({
   initialVideo,
@@ -33,7 +29,7 @@ export function InlineVideoPlayer({
   const containerRef = useRef(null);
 
   useEffect(() => {
-    const shuffled = shuffleArray(allVideos);
+    const shuffled = shuffleArray(allVideos || []);
     const startIndex = shuffled.findIndex(v => v.id === initialVideo.id);
     if (startIndex >= 0) {
       setVideoList(shuffled);
@@ -54,7 +50,8 @@ export function InlineVideoPlayer({
         setVideoHistory(prev => [...prev, videoList[nextIndex]]);
       }
     } else {
-      const availableVideos = allVideos.filter(v => !videoHistory.map(h => h.id).includes(v.id));
+      const usedIds = videoHistory.map(h => h.id);
+      const availableVideos = (allVideos || []).filter(v => !usedIds.includes(v.id));
       if (availableVideos.length > 0) {
         const shuffled = shuffleArray(availableVideos);
         const nextVideo = shuffled[0];
@@ -62,11 +59,14 @@ export function InlineVideoPlayer({
         setVideoHistory(prev => [...prev, nextVideo]);
         setCurrentIndex(prev => prev + 1);
       } else {
-        const shuffled = shuffleArray(allVideos);
+        // fallback: reshuffle everything
+        const shuffled = shuffleArray(allVideos || []);
         const nextVideo = shuffled[0];
-        setVideoList(prev => [...prev, nextVideo]);
-        setVideoHistory(prev => [...prev, nextVideo]);
-        setCurrentIndex(prev => prev + 1);
+        if (nextVideo) {
+          setVideoList(prev => [...prev, nextVideo]);
+          setVideoHistory(prev => [...prev, nextVideo]);
+          setCurrentIndex(prev => prev + 1);
+        }
       }
     }
   };
@@ -121,7 +121,7 @@ export function InlineVideoPlayer({
 
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
-        onClose();
+        onClose && onClose();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
         loadNextVideo();
@@ -162,7 +162,7 @@ export function InlineVideoPlayer({
 
   const closeComments = () => {
     setShowComments(false);
-    loadCommentCount(currentVideo.id);
+    if (currentVideo) loadCommentCount(currentVideo.id);
   };
 
   const loadCommentCount = async (videoId) => {
@@ -181,13 +181,13 @@ export function InlineVideoPlayer({
   };
 
   useEffect(() => {
-    if (currentVideo) {
-      loadCommentCount(currentVideo.id);
-      if (currentVideo.hasAffiliate) {
-        loadProducts(currentVideo.id);
-      }
+    if (!currentVideo) return;
+    loadCommentCount(currentVideo.id);
+    if (currentVideo.hasAffiliate) {
+      loadProducts(currentVideo.id);
     }
-  }, [currentVideo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [/* intentionally empty to avoid double calls */ currentIndex, videoList]);
 
   const loadProducts = async (videoId) => {
     setLoadingProducts(true);
@@ -229,7 +229,7 @@ export function InlineVideoPlayer({
   const renderActionButtons = (video) => {
     const buttons = [];
 
-    const isLiked = likedVideoIds.includes(video.id);
+    const isLiked = (likedVideoIds || []).includes(video.id);
     buttons.push(
       <div key="like" className="inline-action-btn" onClick={() => handleLike(video.id)}>
         <svg className="action-icon" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor">
@@ -295,6 +295,40 @@ export function InlineVideoPlayer({
 
   const currentVideo = videoList[currentIndex];
 
+  // derive owner safely (supports array or object or fallbacks)
+  const deriveOwner = (video) => {
+    if (!video) return null;
+    // if video.user is set and is array or object
+    if (video.user) {
+      const u = Array.isArray(video.user) ? video.user[0] : video.user;
+      if (u && (u.id || u.username || u.avatar)) {
+        return {
+          id: u.id || video.userId,
+          username: u.username || u.full_name || u.name,
+          avatar: u.avatar || u.avatar_url || ''
+        };
+      }
+    }
+    // fallbacks: sometimes fields are userName / userAvatar
+    if (video.userName || video.userAvatar) {
+      return {
+        id: video.userId,
+        username: video.userName || video.userId,
+        avatar: video.userAvatar || ''
+      };
+    }
+    // minimal fallback
+    return {
+      id: video.userId,
+      username: video.userId || 'unknown',
+      avatar: ''
+    };
+  };
+
+  const owner = deriveOwner(currentVideo);
+  const isOwnerCurrentUser = owner && currentUser && owner.id === currentUser.id;
+  const isFollowingOwner = owner ? followingList.includes(owner.id) : false;
+
   return (
     <div className="inline-video-player-overlay">
       <div className="inline-video-player-container" ref={containerRef}>
@@ -318,25 +352,38 @@ export function InlineVideoPlayer({
 
           <div className="inline-video-info">
             <div className="inline-video-header">
-              <img src={currentUser.avatar} alt="Profile" className="inline-user-avatar" />
+              <img
+                src={owner?.avatar || currentVideo.user?.avatar || currentUser?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                alt="Profile"
+                className="inline-user-avatar"
+              />
               <div>
                 <div
                   className="inline-username"
-                  onClick={() => onUsernameClick && onUsernameClick(currentVideo.userId)}
+                  onClick={() => onUsernameClick && onUsernameClick(owner?.id || currentVideo.userId)}
+                  style={{ cursor: 'pointer' }}
                 >
-                  @{currentUser.name}
+                  @{owner?.username || currentVideo.user?.username || currentUser?.name || (owner?.id || '').toString()}
                 </div>
                 <div className="inline-video-title">{currentVideo.title}</div>
               </div>
-              {currentVideo.userId !== currentUser.id && (
-                <button
-                  className={`follow-btn ${followingList.includes(currentVideo.userId) ? 'followed' : ''}`}
-                  onClick={() => handleFollow(currentVideo.userId)}
-                >
-                  {followingList.includes(currentVideo.userId) ? "Following" : "Follow"}
-                </button>
+
+              {/* show follow button for owner if not current user */}
+              {!isOwnerCurrentUser && (
+                // prefer to use FollowButton component if available (it handles check & toggles)
+                <div style={{ marginLeft: 'auto' }}>
+                  <FollowButton
+                    viewerId={currentUser?.id}
+                    targetId={owner?.id}
+                    onToggle={() => {
+                      // notify parent App state to update followingList if they provided onFollow
+                      onFollow && onFollow(owner?.id);
+                    }}
+                  />
+                </div>
               )}
             </div>
+
             <div className="inline-video-desc">{currentVideo.desc}</div>
           </div>
 
@@ -346,7 +393,7 @@ export function InlineVideoPlayer({
         </div>
       </div>
 
-      {showComments && (
+      {showComments && currentVideo && (
         <CommentsPanel
           videoId={currentVideo.id}
           currentUser={currentUser}
@@ -415,3 +462,4 @@ export function InlineVideoPlayer({
     </div>
   );
 }
+
