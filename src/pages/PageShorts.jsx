@@ -1,8 +1,11 @@
+// src/pages/PageShorts.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { shuffleArray } from '../utils/videoUtils';
+import { ShortsPlayer } from '../components/ShortsPlayer'; // assume path
+import { CommentsPanel } from '../components/CommentsPanel';
 
 export function PageShorts({
-  uploads,
+  uploads = [],
   currentUser,
   likedVideoIds = [],
   followingList = [],
@@ -14,36 +17,62 @@ export function PageShorts({
   const [videoHistory, setVideoHistory] = useState([]);
   const [randomVideos, setRandomVideos] = useState([]);
   const containerRef = useRef(null);
+  const [showPlayer, setShowPlayer] = useState(false);
 
   useEffect(() => {
-    if (uploads.length > 0 && randomVideos.length === 0) {
+    if (uploads.length > 0) {
       const shuffled = shuffleArray(uploads);
-      setRandomVideos([shuffled[0]]);
-      setVideoHistory([shuffled[0]]);
+      // If we already had randomVideos, preserve it; otherwise seed with first item.
+      if (randomVideos.length === 0) {
+        setRandomVideos([shuffled[0]]);
+        setVideoHistory([shuffled[0]]);
+        setCurrentIndex(0);
+      }
     }
+    // only run when uploads change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploads]);
 
+  const openPlayerAt = (index) => {
+    // Ensure index exists in randomVideos; if not, add it.
+    const vid = randomVideos[index] || uploads.find(v => v.id === (randomVideos[index]?.id)) || uploads[index];
+    if (!vid) return;
+
+    // If clicked video isn't already in randomVideos, insert it at currentIndex.
+    if (!randomVideos.find(v => v.id === vid.id)) {
+      setRandomVideos(prev => {
+        const copy = [...prev];
+        copy[index] = vid;
+        return copy;
+      });
+      setVideoHistory(prev => [...prev, vid]);
+    }
+
+    setCurrentIndex(index);
+    setShowPlayer(true);
+  };
+
   const loadNextVideo = () => {
-    const availableVideos = uploads.filter(v => !videoHistory.map(h => h.id).includes(v.id));
+    const usedIds = videoHistory.map(h => h.id);
+    const availableVideos = uploads.filter(v => !usedIds.includes(v.id));
     if (availableVideos.length > 0) {
       const shuffled = shuffleArray(availableVideos);
-      const nextVideo = shuffled[0];
-      setRandomVideos(prev => [...prev, nextVideo]);
-      setVideoHistory(prev => [...prev, nextVideo]);
+      const next = shuffled[0];
+      setRandomVideos(prev => [...prev, next]);
+      setVideoHistory(prev => [...prev, next]);
       setCurrentIndex(prev => prev + 1);
-    } else {
+    } else if (uploads.length > 0) {
+      // fall back to reshuffle all uploads
       const shuffled = shuffleArray(uploads);
-      const nextVideo = shuffled[0];
-      setRandomVideos(prev => [...prev, nextVideo]);
-      setVideoHistory(prev => [...prev, nextVideo]);
+      const next = shuffled[0];
+      setRandomVideos(prev => [...prev, next]);
+      setVideoHistory(prev => [...prev, next]);
       setCurrentIndex(prev => prev + 1);
     }
   };
 
   const goToPrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
-    }
+    if (currentIndex > 0) setCurrentIndex(prev => prev - 1);
   };
 
   useEffect(() => {
@@ -54,37 +83,24 @@ export function PageShorts({
       if (isScrolling) return;
       e.preventDefault();
       isScrolling = true;
-
       if (e.deltaY > 50) {
         loadNextVideo();
       } else if (e.deltaY < -50) {
         goToPrevious();
       }
-
-      setTimeout(() => {
-        isScrolling = false;
-      }, 500);
+      setTimeout(() => (isScrolling = false), 400);
     };
 
-    const handleTouchStart = (e) => {
-      touchStartY = e.touches[0].clientY;
-    };
-
+    const handleTouchStart = (e) => { touchStartY = e.touches[0].clientY; };
     const handleTouchEnd = (e) => {
       if (isScrolling) return;
       const touchEndY = e.changedTouches[0].clientY;
       const diff = touchStartY - touchEndY;
-
       if (Math.abs(diff) > 50) {
         isScrolling = true;
-        if (diff > 0) {
-          loadNextVideo();
-        } else {
-          goToPrevious();
-        }
-        setTimeout(() => {
-          isScrolling = false;
-        }, 500);
+        if (diff > 0) loadNextVideo();
+        else goToPrevious();
+        setTimeout(() => (isScrolling = false), 400);
       }
     };
 
@@ -113,154 +129,113 @@ export function PageShorts({
         containerRef.current.removeEventListener('touchend', handleTouchEnd);
       }
     };
-  }, [currentIndex, videoHistory, uploads]);
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, videoHistory, uploads, randomVideos]);
 
   const openComments = (videoId) => {
-    alert(`Comments for video ${videoId} - Feature coming soon!`);
+    // open player and open its comments — simplified: open player then it can open CommentsPanel
+    const idx = randomVideos.findIndex(v => v.id === videoId);
+    if (idx >= 0) {
+      setCurrentIndex(idx);
+      setShowPlayer(true);
+      // ShortsPlayer has its own comments toggling; we don't force it here
+    } else {
+      // ensure the clicked video is added and opened
+      const foundIndex = uploads.findIndex(v => v.id === videoId);
+      if (foundIndex >= 0) {
+        // append the clicked video then open it
+        const vid = uploads[foundIndex];
+        setRandomVideos(prev => [...prev, vid]);
+        setVideoHistory(prev => [...prev, vid]);
+        setCurrentIndex(randomVideos.length);
+        setShowPlayer(true);
+      }
+    }
   };
 
   const shareVideo = (video) => {
-    const shareData = {
-      title: video.title,
-      text: video.desc,
-      url: window.location.href
-    };
-
-    if (navigator.share) {
-      navigator.share(shareData);
-    } else {
-      navigator.clipboard.writeText(window.location.href).then(() => {
-        alert('Video link copied to clipboard!');
-      }).catch(() => {
-        alert('Copy this link to share: ' + window.location.href);
-      });
-    }
+    const shareData = { title: video.title, text: video.desc, url: window.location.href };
+    if (navigator.share) navigator.share(shareData).catch(() => navigator.clipboard.writeText(window.location.href));
+    else navigator.clipboard.writeText(window.location.href).then(() => alert('Video link copied to clipboard!'));
   };
 
-  const renderActionButtons = (video) => {
-    const buttons = [];
-    const isLiked = likedVideoIds.includes(video.id);
-
-    buttons.push(
-      <div key="like" className="clickz-action-btn" onClick={() => onLike && onLike(video.id)}>
-        <svg className="action-icon" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-        </svg>
-        <span>{video.likes || 0}</span>
-      </div>
-    );
-
-    if (video.hasAffiliate) {
-      buttons.push(
-        <div key="cart" className="clickz-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
-          <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <circle cx="9" cy="21" r="1"/>
-            <circle cx="20" cy="21" r="1"/>
-            <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-          </svg>
-          <span>Shop</span>
-        </div>
-      );
-    }
-
-    if (video.hasLocation) {
-      buttons.push(
-        <div
-          key="location"
-          className="clickz-action-btn"
-          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(video.location || '')}`, "_blank")}
-        >
-          <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-            <circle cx="12" cy="10" r="3"/>
-          </svg>
-          <span>Location</span>
-        </div>
-      );
-    }
-
-    buttons.push(
-      <div key="comment" className="clickz-action-btn" onClick={() => openComments(video.id)}>
-        <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span>0</span>
-      </div>
-    );
-
-    buttons.push(
-      <div key="share" className="clickz-action-btn" onClick={() => shareVideo(video)}>
-        <svg className="action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-          <polyline points="16 6 12 2 8 6"/>
-          <line x1="12" y1="2" x2="12" y2="15"/>
-        </svg>
-        <span>Share</span>
-      </div>
-    );
-
-    return buttons;
+  const openProfile = (userId) => {
+    onUsernameClick && onUsernameClick(userId);
   };
 
-  if (!uploads.length || randomVideos.length === 0) {
+  if (!uploads || uploads.length === 0) {
     return (
-      <div className="no-videos-message" style={{ textAlign: 'center', marginTop: '100px' }}>
+      <div className="no-videos-message" style={{ textAlign: 'center', marginTop: 100 }}>
         <h2>Clickz</h2>
         <p>No videos available for Clickz yet.</p>
       </div>
     );
   }
 
-  const currentVideo = randomVideos[currentIndex];
-
+  // render a simple stacked list for small thumbnails — clicking opens ShortsPlayer at that index
   return (
     <div className="clickz-feed-fullscreen" ref={containerRef}>
-      <div className="clickz-container-fullscreen">
-        <video
-          key={currentVideo.id}
-          className="clickz-video-fullscreen"
-          src={currentVideo.url}
-          controls
-          loop
-          autoPlay
-          muted={false}
-        />
-
-        <div className="clickz-actions">
-          {renderActionButtons(currentVideo)}
-        </div>
-
-        <div className="clickz-profile">
-          <img src={currentVideo.user?.avatar || currentUser?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} alt="Profile" />
-          <div>
-            <div
-              className="clickz-username clickz-username-clickable"
-              onClick={() => onUsernameClick && onUsernameClick(currentVideo.userId)}
+      <div className="clickz-container-fullscreen" style={{ padding: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
+          {uploads.map((v, idx) => (
+            <div key={v.id} className="video-grid-card" style={{ cursor: 'pointer' }}
+              onClick={() => {
+                // ensure the clicked video is present in randomVideos at currentIndex
+                const inListIndex = randomVideos.findIndex(rv => rv.id === v.id);
+                if (inListIndex >= 0) {
+                  setCurrentIndex(inListIndex);
+                } else {
+                  setRandomVideos(prev => [...prev, v]);
+                  setVideoHistory(prev => [...prev, v]);
+                  setCurrentIndex(randomVideos.length);
+                }
+                setShowPlayer(true);
+              }}
             >
-              @{currentVideo.user?.username || currentUser?.name || 'Unknown'}
+              <div className="video-thumbnail-wrapper">
+                <video src={v.url} className="video-thumbnail" preload="metadata" muted />
+                <div className="video-overlay">
+                  <svg className="play-icon" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
+              <div className="video-grid-info">
+                <div className="video-grid-user" onClick={(e) => { e.stopPropagation(); openProfile(v.userId); }}>
+                  <img src={(v.user && (v.user.avatar || v.user[0]?.avatar)) || currentUser?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} className="video-grid-avatar" alt="u" />
+                  <div className="video-grid-user-details">
+                    <span className="video-grid-username">@{(v.user && (v.user.username || v.user[0]?.username)) || v.user?.username || 'unknown'}</span>
+                  </div>
+                </div>
+                <h4 className="video-grid-title">{v.title}</h4>
+                <div className="video-grid-stats">
+                  <span>{v.likes || 0} likes</span>
+                  <span>{v.views || 0} views</span>
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: '14px', marginTop: '4px', opacity: 0.8 }}>
-              {currentVideo.title}
-            </div>
-            <div style={{ fontSize: '12px', marginTop: '2px', opacity: 0.6 }}>
-              {currentVideo.desc}
-            </div>
-          </div>
-          {currentVideo.userId !== currentUser?.id && (
-            <button
-              className={`follow-btn ${followingList.includes(currentVideo.userId) ? 'followed' : ''}`}
-              onClick={() => onFollow && onFollow(currentVideo.userId)}
-            >
-              {followingList.includes(currentVideo.userId) ? "Following" : "Follow"}
-            </button>
-          )}
-        </div>
-
-        <div className="clickz-scroll-hint">
-          Scroll to see more videos
+          ))}
         </div>
       </div>
+
+      {showPlayer && (
+        <ShortsPlayer
+          videos={randomVideos.length ? randomVideos : uploads}
+          currentIndex={currentIndex}
+          currentUser={currentUser}
+          likes={likedVideoIds}
+          setLikes={() => {}}
+          follows={{}} // ShortsPlayer will call onFollow instead of using this prop
+          setFollows={() => {}}
+          onClose={() => setShowPlayer(false)}
+          onNavigate={(dir) => {
+            if (dir === 'next') loadNextVideo();
+            else if (dir === 'prev') goToPrevious();
+          }}
+          onLike={(id) => onLike && onLike(id)}
+          onFollow={(uid) => onFollow && onFollow(uid)}
+          onUsernameClick={(uid) => onUsernameClick && onUsernameClick(uid)}
+        />
+      )}
     </div>
   );
 }
+
