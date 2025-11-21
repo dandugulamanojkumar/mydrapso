@@ -60,14 +60,23 @@ export function VideosFeed({
   return (
     <div className="videos-grid-container">
       {uploads.map((vid) => {
-        const videoUser = vid.user || { username: 'Unknown', avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=default' };
+        const videoUser = vid.user || {
+          username: 'Unknown',
+          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'
+        };
+
         const isLiked = likedVideoIds.includes(vid.id);
         const isFollowing = followingList.includes(vid.userId);
         const isOwnVideo = currentUser?.id === vid.userId;
 
         return (
           <div key={vid.id} className="video-grid-card">
-            <div className="video-thumbnail-wrapper" onClick={() => onVideoClick && onVideoClick(vid.id)}>
+            
+            {/* VIDEO THUMBNAIL */}
+            <div
+              className="video-thumbnail-wrapper"
+              onClick={() => onVideoClick && onVideoClick(vid.id)}
+            >
               <video
                 src={vid.url}
                 className="video-thumbnail"
@@ -75,20 +84,33 @@ export function VideosFeed({
               />
               <div className="video-overlay">
                 <svg className="play-icon" viewBox="0 0 24 24" fill="white">
-                  <path d="M8 5v14l11-7z"/>
+                  <path d="M8 5v14l11-7z" />
                 </svg>
               </div>
-              <div className="video-duration">{Math.floor(vid.duration / 60)}:{(vid.duration % 60).toString().padStart(2, '0')}</div>
+              <div className="video-duration">
+                {Math.floor(vid.duration / 60)}:
+                {(vid.duration % 60).toString().padStart(2, '0')}
+              </div>
             </div>
 
+            {/* BOTTOM INFO */}
             <div className="video-grid-info">
+
+              {/* USER HEADER */}
               <div
                 className="video-grid-user"
                 onClick={() => onUsernameClick && onUsernameClick(vid.userId)}
               >
-                <img src={videoUser.avatar} alt={videoUser.username} className="video-grid-avatar" />
+                <img
+                  src={videoUser.avatar}
+                  alt={videoUser.username}
+                  className="video-grid-avatar"
+                />
+
                 <div className="video-grid-user-details">
                   <span className="video-grid-username">@{videoUser.username}</span>
+
+                  {/* FOLLOW + UNFOLLOW BUTTON */}
                   {!isOwnVideo && (
                     <button
                       className={`follow-btn-tiny ${isFollowing ? 'following' : ''}`}
@@ -103,26 +125,39 @@ export function VideosFeed({
                 </div>
               </div>
 
+              {/* VIDEO TITLE */}
               <h4 className="video-grid-title">{vid.title}</h4>
+
+              {/* VIDEO DESCRIPTION */}
               <p className="video-grid-description">{vid.desc}</p>
 
+              {/* LOCATION */}
               {vid.hasLocation && vid.location && (
                 <p className="video-grid-location">
-                  <svg className="location-icon-small" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-                    <circle cx="12" cy="10" r="3"/>
+                  <svg
+                    className="location-icon-small"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
                   </svg>
                   {vid.location}
                 </p>
               )}
 
+              {/* STATS */}
               <div className="video-grid-stats">
                 <span>{vid.likes || 0} likes</span>
                 <span>{vid.comments_count || 0} comments</span>
                 <span>{vid.views || 0} views</span>
               </div>
 
+              {/* ACTION BUTTONS */}
               <div className="video-grid-actions">
+                
+                {/* LIKE */}
                 <button
                   className={`action-btn-small ${isLiked ? 'liked' : ''}`}
                   onClick={() => onLike && onLike(vid.id)}
@@ -133,6 +168,7 @@ export function VideosFeed({
                   </svg>
                 </button>
 
+                {/* SHOP */}
                 {vid.hasAffiliate && (
                   <button
                     className="action-btn-small"
@@ -140,13 +176,14 @@ export function VideosFeed({
                     title="Shop"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <circle cx="9" cy="21" r="1"/>
-                      <circle cx="20" cy="21" r="1"/>
-                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+                      <circle cx="9" cy="21" r="1" />
+                      <circle cx="20" cy="21" r="1" />
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                     </svg>
                   </button>
                 )}
 
+                {/* COMMENT */}
                 <button
                   className="action-btn-small"
                   onClick={() => openComments(vid.id)}
@@ -157,20 +194,22 @@ export function VideosFeed({
                   </svg>
                 </button>
 
+                {/* SHARE */}
                 <button
                   className="action-btn-small"
                   onClick={() => shareVideo(vid)}
                   title="Share"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <circle cx="18" cy="5" r="3"/>
-                    <circle cx="6" cy="12" r="3"/>
-                    <circle cx="18" cy="19" r="3"/>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                    <circle cx="18" cy="5" r="3" />
+                    <circle cx="6" cy="12" r="3" />
+                    <circle cx="18" cy="19" r="3" />
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                   </svg>
                 </button>
 
+                {/* DELETE */}
                 {allowDelete && (
                   <button
                     className="action-btn-small delete-btn"
@@ -178,11 +217,12 @@ export function VideosFeed({
                     title="Delete"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <polyline points="3 6 5 6 21 6"/>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
                   </button>
                 )}
+
               </div>
             </div>
           </div>
@@ -191,3 +231,4 @@ export function VideosFeed({
     </div>
   );
 }
+
