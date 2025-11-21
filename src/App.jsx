@@ -24,7 +24,8 @@ import {
   unfollowUser,
   uploadVideo,
   subscribeToVideos,
-  incrementVideoViews
+  incrementVideoViews,
+  getUserProfile
 } from "./lib/supabase";
 import "./styles.css";
 
@@ -47,6 +48,8 @@ export default function App() {
 
   // NEW: which other user's profile to view (null => show current user's profile)
   const [viewProfileId, setViewProfileId] = useState(null);
+  // NEW: full data for external profile fetched from DB
+  const [externalProfile, setExternalProfile] = useState(null);
 
   /* ===== UPLOAD STATE ===== */
   const [showModal, setShowModal] = useState(false);
@@ -112,71 +115,113 @@ export default function App() {
     setSelectedVideo(null);
   };
 
-  /* ===== SEARCH FUNCTION ===== */
-  const handleSearch = (query) => {
-    setSearchQuery(query);
-    const lowerQuery = query.toLowerCase();
+  /* ===== SEARCH FUNCTION (NEW: queries Supabase directly) ===== */
+  const handleSearch = async (query) => {
+    if (!query || !query.trim()) return;
 
-    const matchedVideos = uploads.filter(video =>
-      (video.title || "").toLowerCase().includes(lowerQuery) ||
-      (video.desc || "").toLowerCase().includes(lowerQuery)
-    );
+    const q = query.trim();
+    setSearchQuery(q);
 
-    // Build users list: include current profile and any users found in uploads
-    const usersFromUploads = uploads
-      .map(v => {
-        const u = v.user;
-        if (!u) return null;
-        // user might be array or object
-        const userObj = Array.isArray(u) ? u[0] : u;
-        return {
-          id: userObj?.id || v.userId,
-          name: userObj?.username || userObj?.full_name || userObj?.name,
-          avatar: userObj?.avatar || userObj?.avatar_url || undefined
-        };
-      })
-      .filter(Boolean);
+    try {
+      // Search users (username or full_name)
+      const { data: users, error: userError } = await supabase
+        .from("users")
+        .select("id, username, full_name, avatar, bio, follower_count, following_count")
+        .or(`username.ilike.%${q}%,full_name.ilike.%${q}%`)
+        .limit(50);
 
-    // include current user profile as well
-    const allUsers = [
-      ...(profile ? [{
-        id: profile.id,
-        name: profile.name,
-        avatar: profile.avatar
-      }] : []),
-      ...usersFromUploads
-    ];
+      if (userError) {
+        console.error("User search error:", userError);
+      }
 
-    // unique by id
-    const uniqueUsersMap = {};
-    allUsers.forEach(u => {
-      if (u && u.id) uniqueUsersMap[u.id] = u;
-    });
-    const uniqueUsers = Object.values(uniqueUsersMap);
+      // Search videos (title or description)
+      const { data: videos, error: videoError } = await supabase
+        .from("videos")
+        .select("id, title, description, video_url, has_affiliate, affiliate_link, has_location, location, user_id, likes, views")
+        .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
+        .limit(50);
 
-    const matchedUsers = uniqueUsers.filter(user =>
-      (user.name || "").toLowerCase().includes(lowerQuery) ||
-      (user.id || "").toLowerCase().includes(lowerQuery)
-    );
+      if (videoError) {
+        console.error("Video search error:", videoError);
+      }
 
-    setSearchResults({ users: matchedUsers, videos: matchedVideos });
-    setShowSearchResults(true);
+      // Normalize video objects to match your front-end naming (title->title, description->desc, video_url->url)
+      const formattedVideos = (videos || []).map(v => ({
+        id: v.id,
+        url: v.video_url,
+        title: v.title,
+        desc: v.description,
+        hasAffiliate: v.has_affiliate,
+        affiliateLink: v.affiliate_link,
+        hasLocation: v.has_location,
+        location: v.location,
+        userId: v.user_id,
+        likes: v.likes || 0,
+        views: v.views || 0
+      }));
+
+      // Normalize user objects for front-end (use full_name and username)
+      const formattedUsers = (users || []).map(u => ({
+        id: u.id,
+        username: u.username,
+        full_name: u.full_name,
+        avatar: u.avatar,
+        bio: u.bio,
+        follower_count: u.follower_count,
+        following_count: u.following_count
+      }));
+
+      setSearchResults({ users: formattedUsers, videos: formattedVideos });
+      setShowSearchResults(true);
+    } catch (err) {
+      console.error("Search failed:", err);
+      setSearchResults({ users: [], videos: [] });
+      setShowSearchResults(true);
+    }
   };
 
-  // NEW: handle user click — open own profile or another user's profile
-  const handleUserClick = (userId) => {
+  // NEW: handle user click — fetch profile from DB and open profile page
+  const handleUserClick = async (userId) => {
     if (!userId) return;
+    try {
+      // If clicked own user, open own profile
+      if (userId === profile?.id) {
+        setViewProfileId(null);
+        setExternalProfile(null);
+        setActivePage('profile');
+        setShowSearchResults(false);
+        return;
+      }
 
-    if (userId === profile?.id) {
-      // open own profile
-      setViewProfileId(null);
-      setActivePage('profile');
-    } else {
-      // open other user's profile (store which user)
+      const userData = await getUserProfile(userId);
+      if (userData) {
+        // Map supabase user fields to the shape PageProfile expects
+        const mapped = {
+          id: userData.id,
+          name: userData.username || userData.full_name || userData.fullname || userData.name,
+          avatar: userData.avatar || userData.avatar_url || "https://i.pravatar.cc/50?img=3",
+          bio: userData.bio || "",
+          followerCount: userData.follower_count || 0,
+          followingCount: userData.following_count || 0,
+          raw: userData // keep full raw if needed
+        };
+        setExternalProfile(mapped);
+        setViewProfileId(userId);
+        setActivePage('profile');
+      } else {
+        // fallback: open profile page with id only
+        setExternalProfile(null);
+        setViewProfileId(userId);
+        setActivePage('profile');
+      }
+    } catch (err) {
+      console.error("Get user profile error:", err);
+      setExternalProfile(null);
       setViewProfileId(userId);
-      setActivePage('profile'); // PageProfile will render other user's data when viewProfileId is set
+      setActivePage('profile');
+    } finally {
+      setShowSearchResults(false);
     }
-    setShowSearchResults(false);
   };
 
   // When clicking a video from search, open Inline player (keeps current app behavior)
@@ -218,7 +263,6 @@ export default function App() {
       if (isFollowing) {
         await unfollowUser(profile.id, userId);
         setFollowingList(prev => prev.filter(id => id !== userId));
-        // update counts in profile and uploads user sub-objects if present
         setProfile(prev => prev ? ({ ...prev, followingCount: Math.max((prev.followingCount || prev.following_count || 0) - 1, 0) }) : prev);
         setUploads(prev => prev.map(v =>
           v.userId === userId && v.user?.[0]
@@ -240,42 +284,11 @@ export default function App() {
     }
   };
 
-  // Helper: derive a profile object for a given userId from uploads (non-destructive; keeps your naming)
-  const getUserProfileById = (userId) => {
-    if (!userId) return null;
-    // try to find any video by that user
-    const found = uploads.find(v => v.userId === userId);
-    const u = found?.user;
-    const userObj = Array.isArray(u) ? u[0] : u; // some results use array, some use object
-    if (userObj) {
-      return {
-        id: userObj.id || userId,
-        name: userObj.username || userObj.full_name || userObj.name || "",
-        avatar: userObj.avatar || userObj.avatar_url || profile?.avatar || "",
-        bio: userObj.bio || "",
-        followerCount: userObj.follower_count || userObj.followerCount || 0,
-        followingCount: userObj.following_count || userObj.followingCount || 0,
-        isCurrentUser: profile?.id === userObj.id
-      };
-    }
-    // fallback minimal object
-    return {
-      id: userId,
-      name: userId,
-      avatar: profile?.avatar || "",
-      bio: "",
-      followerCount: 0,
-      followingCount: 0,
-      isCurrentUser: profile?.id === userId
-    };
-  };
-
   /* ===== PAGES ===== */
   const pages = useMemo(
     () => {
-      // derive the profile object to pass into PageProfile:
-      const profileToShow = viewProfileId ? getUserProfileById(viewProfileId) : profile;
-      // ensure profileToShow has isCurrentUser flag
+      // decide profile to show: externalProfile (if viewing other user) or signed-in profile
+      const profileToShow = viewProfileId ? externalProfile : profile;
       const profileWithFlag = profileToShow ? ({ ...profileToShow, isCurrentUser: !!(profile && profile.id && (!viewProfileId || profile.id === viewProfileId)) }) : null;
 
       return {
@@ -345,8 +358,7 @@ export default function App() {
         ),
       };
     },
-    // include viewProfileId so memo updates when switching between users
-    [uploads, likedVideoIds, followingList, profile, viewProfileId]
+    [uploads, likedVideoIds, followingList, profile, viewProfileId, externalProfile]
   );
 
   /* ===== FILE PICKER ===== */
@@ -433,6 +445,7 @@ export default function App() {
         setLikedVideoIds([]);
         setFollowingList([]);
         setViewProfileId(null);
+        setExternalProfile(null);
       }
     });
 
@@ -699,7 +712,7 @@ export default function App() {
           onVideoClick={handleVideoClick}
           onClose={() => setShowSearchResults(false)}
           currentUser={profile}
-          follows={followingList}       // match SearchResults prop name
+          follows={followingList}
           toggleFollow={toggleFollow}
         />
       )}
@@ -731,4 +744,5 @@ export default function App() {
     </div>
   );
 }
+
 
