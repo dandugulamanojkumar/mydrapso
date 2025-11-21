@@ -45,6 +45,9 @@ export default function App() {
   const [likedVideoIds, setLikedVideoIds] = useState([]);
   const [viewedVideoIds, setViewedVideoIds] = useState([]);
 
+  // NEW: which other user's profile to view (null => show current user's profile)
+  const [viewProfileId, setViewProfileId] = useState(null);
+
   /* ===== UPLOAD STATE ===== */
   const [showModal, setShowModal] = useState(false);
   const [step, setStep] = useState(1);
@@ -81,6 +84,8 @@ export default function App() {
     setUploads([]);
     setLikedVideoIds([]);
     setFollowingList([]);
+    setViewProfileId(null);
+    setActivePage("home");
   };
 
   /* ===== INLINE VIDEO PLAYER FUNCTIONS ===== */
@@ -95,7 +100,7 @@ export default function App() {
         setViewedVideoIds(prev => [...prev, videoId]);
         setUploads(prevUploads =>
           prevUploads.map(v =>
-            v.id === videoId ? { ...v, views: v.views + 1 } : v
+            v.id === videoId ? { ...v, views: (v.views || 0) + 1 } : v
           )
         );
       }
@@ -113,28 +118,71 @@ export default function App() {
     const lowerQuery = query.toLowerCase();
 
     const matchedVideos = uploads.filter(video =>
-      video.title.toLowerCase().includes(lowerQuery) ||
-      video.desc.toLowerCase().includes(lowerQuery)
+      (video.title || "").toLowerCase().includes(lowerQuery) ||
+      (video.desc || "").toLowerCase().includes(lowerQuery)
     );
 
-    const allUsers = [profile];
-    const matchedUsers = allUsers.filter(user =>
-      user.name.toLowerCase().includes(lowerQuery) ||
-      user.id.toLowerCase().includes(lowerQuery)
+    // Build users list: include current profile and any users found in uploads
+    const usersFromUploads = uploads
+      .map(v => {
+        const u = v.user;
+        if (!u) return null;
+        // user might be array or object
+        const userObj = Array.isArray(u) ? u[0] : u;
+        return {
+          id: userObj?.id || v.userId,
+          name: userObj?.username || userObj?.full_name || userObj?.name,
+          avatar: userObj?.avatar || userObj?.avatar_url || undefined
+        };
+      })
+      .filter(Boolean);
+
+    // include current user profile as well
+    const allUsers = [
+      ...(profile ? [{
+        id: profile.id,
+        name: profile.name,
+        avatar: profile.avatar
+      }] : []),
+      ...usersFromUploads
+    ];
+
+    // unique by id
+    const uniqueUsersMap = {};
+    allUsers.forEach(u => {
+      if (u && u.id) uniqueUsersMap[u.id] = u;
+    });
+    const uniqueUsers = Object.values(uniqueUsersMap);
+
+    const matchedUsers = uniqueUsers.filter(user =>
+      (user.name || "").toLowerCase().includes(lowerQuery) ||
+      (user.id || "").toLowerCase().includes(lowerQuery)
     );
 
     setSearchResults({ users: matchedUsers, videos: matchedVideos });
     setShowSearchResults(true);
   };
 
+  // NEW: handle user click — open own profile or another user's profile
   const handleUserClick = (userId) => {
+    if (!userId) return;
+
     if (userId === profile?.id) {
+      // open own profile
+      setViewProfileId(null);
       setActivePage('profile');
+    } else {
+      // open other user's profile (store which user)
+      setViewProfileId(userId);
+      setActivePage('profile'); // PageProfile will render other user's data when viewProfileId is set
     }
+    setShowSearchResults(false);
   };
 
+  // When clicking a video from search, open Inline player (keeps current app behavior)
   const handleVideoClick = (videoId) => {
     openInlinePlayer(videoId);
+    setShowSearchResults(false);
   };
 
   const toggleLike = async (videoId) => {
@@ -147,13 +195,13 @@ export default function App() {
         await unlikeVideo(videoId, profile.id);
         setLikedVideoIds(prev => prev.filter(id => id !== videoId));
         setUploads(prev => prev.map(v =>
-          v.id === videoId ? { ...v, likes: v.likes - 1 } : v
+          v.id === videoId ? { ...v, likes: Math.max((v.likes || 1) - 1, 0) } : v
         ));
       } else {
         await likeVideo(videoId, profile.id);
         setLikedVideoIds(prev => [...prev, videoId]);
         setUploads(prev => prev.map(v =>
-          v.id === videoId ? { ...v, likes: v.likes + 1 } : v
+          v.id === videoId ? { ...v, likes: (v.likes || 0) + 1 } : v
         ));
       }
     } catch (error) {
@@ -170,19 +218,20 @@ export default function App() {
       if (isFollowing) {
         await unfollowUser(profile.id, userId);
         setFollowingList(prev => prev.filter(id => id !== userId));
-        setProfile(prev => ({ ...prev, following_count: prev.following_count - 1 }));
+        // update counts in profile and uploads user sub-objects if present
+        setProfile(prev => prev ? ({ ...prev, followingCount: Math.max((prev.followingCount || prev.following_count || 0) - 1, 0) }) : prev);
         setUploads(prev => prev.map(v =>
-          v.userId === userId && v.users?.[0]
-            ? { ...v, users: [{ ...v.users[0], follower_count: v.users[0].follower_count - 1 }] }
+          v.userId === userId && v.user?.[0]
+            ? { ...v, users: [{ ...v.users[0], follower_count: Math.max((v.users[0].follower_count || 1) - 1, 0) }] }
             : v
         ));
       } else {
         await followUser(profile.id, userId);
         setFollowingList(prev => [...prev, userId]);
-        setProfile(prev => ({ ...prev, following_count: prev.following_count + 1 }));
+        setProfile(prev => prev ? ({ ...prev, followingCount: (prev.followingCount || prev.following_count || 0) + 1 }) : prev);
         setUploads(prev => prev.map(v =>
-          v.userId === userId && v.users?.[0]
-            ? { ...v, users: [{ ...v.users[0], follower_count: v.users[0].follower_count + 1 }] }
+          v.userId === userId && v.user?.[0]
+            ? { ...v, users: [{ ...v.users[0], follower_count: (v.users[0].follower_count || 0) + 1 }] }
             : v
         ));
       }
@@ -191,63 +240,113 @@ export default function App() {
     }
   };
 
+  // Helper: derive a profile object for a given userId from uploads (non-destructive; keeps your naming)
+  const getUserProfileById = (userId) => {
+    if (!userId) return null;
+    // try to find any video by that user
+    const found = uploads.find(v => v.userId === userId);
+    const u = found?.user;
+    const userObj = Array.isArray(u) ? u[0] : u; // some results use array, some use object
+    if (userObj) {
+      return {
+        id: userObj.id || userId,
+        name: userObj.username || userObj.full_name || userObj.name || "",
+        avatar: userObj.avatar || userObj.avatar_url || profile?.avatar || "",
+        bio: userObj.bio || "",
+        followerCount: userObj.follower_count || userObj.followerCount || 0,
+        followingCount: userObj.following_count || userObj.followingCount || 0,
+        isCurrentUser: profile?.id === userObj.id
+      };
+    }
+    // fallback minimal object
+    return {
+      id: userId,
+      name: userId,
+      avatar: profile?.avatar || "",
+      bio: "",
+      followerCount: 0,
+      followingCount: 0,
+      isCurrentUser: profile?.id === userId
+    };
+  };
+
   /* ===== PAGES ===== */
   const pages = useMemo(
-    () => ({
-      home: (
-        <VideosFeed
-          uploads={shuffleArray(uploads)}
-          currentUser={profile}
-          likedVideoIds={likedVideoIds}
-          followingList={followingList}
-          onLike={toggleLike}
-          onFollow={toggleFollow}
-          onUsernameClick={handleUserClick}
-          onVideoClick={openInlinePlayer}
-        />
-      ),
-      shorts: <PageShorts uploads={uploads} currentUser={profile} likedVideoIds={likedVideoIds} followingList={followingList} onLike={toggleLike} onFollow={toggleFollow} onUsernameClick={handleUserClick} />,
-      liked: (
-        <VideosFeed
-          uploads={uploads.filter((v) => likedVideoIds.includes(v.id))}
-          currentUser={profile}
-          likedVideoIds={likedVideoIds}
-          followingList={followingList}
-          onLike={toggleLike}
-          onFollow={toggleFollow}
-          onUsernameClick={handleUserClick}
-          onVideoClick={openInlinePlayer}
-        />
-      ),
-      profile: (
-        <PageProfile
-          profile={profile}
-          setProfile={setProfile}
-          uploads={uploads}
-          setUploads={setUploads}
-          followingList={followingList}
-          likedVideoIds={likedVideoIds}
-          onFollow={toggleFollow}
-        />
-      ),
-      settings: <PageSettings onLogout={handleLogout} />,
-      notifications: <PageNotifications currentUser={profile} />,
-      videos: (
-        <VideosFeed
-          uploads={uploads.filter((v) => v.userId === profile?.id)}
-          currentUser={profile}
-          likedVideoIds={likedVideoIds}
-          followingList={followingList}
-          onLike={toggleLike}
-          onFollow={toggleFollow}
-          allowDelete={true}
-          setUploads={setUploads}
-          onUsernameClick={handleUserClick}
-          onVideoClick={openInlinePlayer}
-        />
-      ),
-    }),
-    [uploads, likedVideoIds, followingList, profile]
+    () => {
+      // derive the profile object to pass into PageProfile:
+      const profileToShow = viewProfileId ? getUserProfileById(viewProfileId) : profile;
+      // ensure profileToShow has isCurrentUser flag
+      const profileWithFlag = profileToShow ? ({ ...profileToShow, isCurrentUser: !!(profile && profile.id && (!viewProfileId || profile.id === viewProfileId)) }) : null;
+
+      return {
+        home: (
+          <VideosFeed
+            uploads={shuffleArray(uploads)}
+            currentUser={profile}
+            likedVideoIds={likedVideoIds}
+            followingList={followingList}
+            onLike={toggleLike}
+            onFollow={toggleFollow}
+            onUsernameClick={handleUserClick}
+            onVideoClick={openInlinePlayer}
+          />
+        ),
+        shorts: (
+          <PageShorts
+            uploads={uploads}
+            currentUser={profile}
+            likedVideoIds={likedVideoIds}
+            followingList={followingList}
+            onLike={toggleLike}
+            onFollow={toggleFollow}
+            onUsernameClick={handleUserClick}
+          />
+        ),
+        liked: (
+          <VideosFeed
+            uploads={uploads.filter((v) => likedVideoIds.includes(v.id))}
+            currentUser={profile}
+            likedVideoIds={likedVideoIds}
+            followingList={followingList}
+            onLike={toggleLike}
+            onFollow={toggleFollow}
+            onUsernameClick={handleUserClick}
+            onVideoClick={openInlinePlayer}
+          />
+        ),
+        profile: (
+          <PageProfile
+            profile={profileWithFlag}
+            setProfile={setProfile}
+            uploads={uploads}
+            setUploads={setUploads}
+            followingList={followingList}
+            likedVideoIds={likedVideoIds}
+            onFollow={toggleFollow}
+            onUsernameClick={handleUserClick}
+            onVideoOpen={openInlinePlayer}
+          />
+        ),
+        settings: <PageSettings onLogout={handleLogout} />,
+        notifications: <PageNotifications currentUser={profile} />,
+        videos: (
+          <VideosFeed
+            uploads={uploads.filter((v) => v.userId === profile?.id)}
+            currentUser={profile}
+            likedVideoIds={likedVideoIds}
+            followingList={followingList}
+            onLike={toggleLike}
+            onFollow={toggleFollow}
+            allowDelete={true}
+            setUploads={setUploads}
+            onUsernameClick={handleUserClick}
+            onVideoClick={openInlinePlayer}
+          />
+        ),
+      };
+    },
+    // include viewProfileId so memo updates when switching between users
+    [uploads, likedVideoIds, followingList, profile, viewProfileId]
   );
 
   /* ===== FILE PICKER ===== */
@@ -333,6 +432,7 @@ export default function App() {
         setUploads([]);
         setLikedVideoIds([]);
         setFollowingList([]);
+        setViewProfileId(null);
       }
     });
 
@@ -350,7 +450,7 @@ export default function App() {
         getUserFollows(userId)
       ]);
 
-      const formattedVideos = videosData.map(video => ({
+      const formattedVideos = videosData.map(video => ( {
         id: video.id,
         url: video.video_url,
         name: video.title,
@@ -365,7 +465,7 @@ export default function App() {
         likes: video.likes,
         views: video.views,
         user: video.users,
-      }));
+      } ) );
 
       setUploads(formattedVideos);
       setLikedVideoIds(likesData);
@@ -575,6 +675,7 @@ export default function App() {
           )}
         </div>
       </main>
+
       {showInlinePlayer && selectedVideo && (
         <InlineVideoPlayer
           initialVideo={selectedVideo}
@@ -589,6 +690,7 @@ export default function App() {
           setUploads={setUploads}
         />
       )}
+
       {showSearchResults && (
         <SearchResults
           searchQuery={searchQuery}
@@ -597,10 +699,11 @@ export default function App() {
           onVideoClick={handleVideoClick}
           onClose={() => setShowSearchResults(false)}
           currentUser={profile}
-          followingList={followingList}
+          follows={followingList}       // match SearchResults prop name
           toggleFollow={toggleFollow}
         />
       )}
+
       {showModal && (
         <UploadModal
           step={step}
@@ -628,3 +731,4 @@ export default function App() {
     </div>
   );
 }
+
