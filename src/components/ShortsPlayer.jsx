@@ -1,73 +1,67 @@
-import React, { useEffect, useRef } from 'react';
+// src/components/ShortsPlayer.jsx
+import React, { useEffect, useRef, useState } from 'react';
+import { CommentsPanel } from './CommentsPanel';
+import { ShoppingCart, X } from 'lucide-react';
+import { getVideoProducts } from '../lib/supabase';
 
 export function ShortsPlayer({
-  videos,
-  currentIndex,
+  videos = [],
+  currentIndex: initialIndex = 0,
   currentUser,
-  likes,
-  setLikes,
-  follows,
+  likes = [],
+  setLikes, // not used locally; parent manages likes via onLike
+  follows = {},
   setFollows,
   onClose,
-  onNavigate
+  onNavigate,
+  onLike,      // function(videoId)
+  onFollow,    // function(userId)
+  onUsernameClick
 }) {
   const containerRef = useRef(null);
-  const currentVideo = videos[currentIndex];
+  const [currentIdx, setCurrentIdx] = useState(initialIndex || 0);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [commentCounts, setCommentCounts] = useState({});
+  const [showProducts, setShowProducts] = useState(false);
+  const [products, setProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+
+  useEffect(() => {
+    setCurrentIdx(initialIndex || 0);
+  }, [initialIndex, videos]);
 
   useEffect(() => {
     let touchStartY = 0;
-    let isScrolling = false;
-
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        onNavigate('prev');
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        onNavigate('next');
-      }
-    };
-
     const handleWheel = (e) => {
       if (isScrolling) return;
-
       e.preventDefault();
-      isScrolling = true;
-
+      setIsScrolling(true);
       if (e.deltaY > 50) {
-        onNavigate('next');
+        handleNavigate('next');
       } else if (e.deltaY < -50) {
-        onNavigate('prev');
+        handleNavigate('prev');
       }
-
-      setTimeout(() => {
-        isScrolling = false;
-      }, 500);
+      setTimeout(() => setIsScrolling(false), 400);
     };
 
-    const handleTouchStart = (e) => {
-      touchStartY = e.touches[0].clientY;
-    };
-
+    const handleTouchStart = (e) => { touchStartY = e.touches[0].clientY; };
     const handleTouchEnd = (e) => {
       if (isScrolling) return;
-
       const touchEndY = e.changedTouches[0].clientY;
       const diff = touchStartY - touchEndY;
-
       if (Math.abs(diff) > 50) {
-        isScrolling = true;
-        if (diff > 0) {
-          onNavigate('next');
-        } else {
-          onNavigate('prev');
-        }
-        setTimeout(() => {
-          isScrolling = false;
-        }, 500);
+        setIsScrolling(true);
+        if (diff > 0) handleNavigate('next');
+        else handleNavigate('prev');
+        setTimeout(() => setIsScrolling(false), 400);
       }
+    };
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose && onClose();
+      else if (e.key === 'ArrowDown') handleNavigate('next');
+      else if (e.key === 'ArrowUp') handleNavigate('prev');
     };
 
     document.addEventListener('keydown', handleKeyDown);
@@ -85,143 +79,210 @@ export function ShortsPlayer({
         containerRef.current.removeEventListener('touchend', handleTouchEnd);
       }
     };
-  }, [currentIndex, videos.length, onClose, onNavigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isScrolling, currentIdx, videos]);
 
-  const toggleLike = (id) => {
-    setLikes((prev) => prev.includes(id) ? prev.filter((vid) => vid !== id) : [...prev, id]);
+  useEffect(() => {
+    // when video changes, load products and comment count
+    const cv = videos[currentIdx];
+    if (cv) {
+      if (cv.hasAffiliate) loadProducts(cv.id);
+      // loading comment count could use a backend route or supabase lib; omitted here to keep code safe
+      // optionally set commentCounts[cv.id] from cv.comments_count if present
+      if (typeof cv.comments_count !== 'undefined') {
+        setCommentCounts(prev => ({ ...prev, [cv.id]: cv.comments_count }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIdx, videos]);
+
+  const handleNavigate = (dir) => {
+    if (dir === 'next') {
+      if (currentIdx < videos.length - 1) setCurrentIdx(currentIdx + 1);
+      else {
+        // if parent provided onNavigate, call it for loading next
+        onNavigate && onNavigate('next');
+      }
+    } else if (dir === 'prev') {
+      if (currentIdx > 0) setCurrentIdx(currentIdx - 1);
+      else onNavigate && onNavigate('prev');
+    }
   };
 
-  const toggleFollowUser = (uid) => {
-    setFollows((prev) => {
-      const copy = { ...prev };
-      if (!copy[uid]) copy[uid] = [];
-      if (copy[uid].includes(currentUser.id)) {
-        copy[uid] = copy[uid].filter((id) => id !== currentUser.id);
-      } else {
-        copy[uid].push(currentUser.id);
-      }
-      return copy;
-    });
+  const handleLike = (videoId, e) => {
+    e && e.stopPropagation();
+    onLike && onLike(videoId);
+  };
+
+  const handleFollow = (userId, e) => {
+    e && e.stopPropagation();
+    onFollow && onFollow(userId);
   };
 
   const openComments = (videoId) => {
-    alert(`Comments for video ${videoId} - Feature coming soon!`);
+    setShowComments(true);
   };
+
+  const closeComments = () => {
+    setShowComments(false);
+  };
+
+  const loadProducts = async (videoId) => {
+    setLoadingProducts(true);
+    try {
+      const items = await getVideoProducts(videoId);
+      setProducts(items || []);
+    } catch (err) {
+      console.error('Load products error', err);
+      setProducts([]);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  const openProductCart = () => setShowProducts(true);
+  const closeProductCart = () => setShowProducts(false);
 
   const shareVideo = (video) => {
-    const shareData = {
-      title: video.title,
-      text: video.desc,
-      url: window.location.href
-    };
-
-    if (navigator.share) {
-      navigator.share(shareData);
-    } else {
-      navigator.clipboard.writeText(window.location.href).then(() => {
-        alert('Video link copied to clipboard!');
-      }).catch(() => {
-        alert('Copy this link to share: ' + window.location.href);
-      });
-    }
+    const shareData = { title: video.title, text: video.desc, url: window.location.href };
+    if (navigator.share) navigator.share(shareData).catch(() => navigator.clipboard.writeText(window.location.href));
+    else navigator.clipboard.writeText(window.location.href).then(() => alert('Link copied'));
   };
 
-  const renderActionButtons = (video) => {
-    const buttons = [];
+  if (!videos || videos.length === 0) return null;
+  const currentVideo = videos[currentIdx] || videos[0];
+  const owner = (currentVideo.user && Array.isArray(currentVideo.user) && currentVideo.user[0]) || currentVideo.user || { id: currentVideo.userId, username: 'unknown', avatar: null };
+  const isOwnerCurrentUser = owner?.id === currentUser?.id;
+  const isLiked = likes.includes(currentVideo.id);
+  const isFollowing = followingListIncludes(follows, owner?.id);
 
-    buttons.push(
-      <div key="like" className="shorts-action-btn" onClick={() => toggleLike(video.id)}>
-        {likes.includes(video.id) ? "❤️" : "🤍"}
-      </div>
-    );
-
-    if (video.hasAffiliate) {
-      buttons.push(
-        <div key="cart" className="shorts-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
-          🛒
-        </div>
-      );
+  function followingListIncludes(followsMapOrArray, id) {
+    // parent may pass followingList as array; ShortsPlayer originally expected object map — support both
+    if (!id) return false;
+    if (Array.isArray(followsMapOrArray)) return followsMapOrArray.includes(id);
+    if (typeof followsMapOrArray === 'object') {
+      // if map keyed by user id contains array of follower ids
+      return followsMapOrArray[id] ? followsMapOrArray[id].includes(currentUser?.id) : false;
     }
-
-    if (video.hasLocation) {
-      buttons.push(
-        <div
-          key="location"
-          className="shorts-action-btn"
-          onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(video.location || '')}`, "_blank")}
-        >
-          📍
-        </div>
-      );
-    }
-
-    buttons.push(
-      <div key="comment" className="shorts-action-btn" onClick={() => openComments(video.id)}>
-        💬
-      </div>
-    );
-
-    buttons.push(
-      <div key="share" className="shorts-action-btn" onClick={() => shareVideo(video)}>
-        📤
-      </div>
-    );
-
-    return buttons;
-  };
-
-  if (!currentVideo) return null;
+    return false;
+  }
 
   return (
-    <div className="shorts-player-overlay" ref={containerRef}>
-      <div className="shorts-player-container">
-        <button className="shorts-close-btn" onClick={onClose}>
-          ✕
-        </button>
+    <div className="clickz-feed-fullscreen" style={{ position: 'fixed', top: 60, left: 240, right: 0, bottom: 0, zIndex: 2000 }} ref={containerRef}>
+      <div className="clickz-container-fullscreen">
+        <video
+          key={currentVideo.id}
+          className="clickz-video-fullscreen"
+          src={currentVideo.url}
+          controls
+          autoPlay
+          loop
+          muted={false}
+        />
 
-        <div className="shorts-video-container">
-          <video
-            className="shorts-video"
-            src={currentVideo.url}
-            controls
-            autoPlay
-            loop
-          />
-
-          <div className="shorts-actions">
-            {renderActionButtons(currentVideo)}
+        {/* Action buttons (right side) */}
+        <div className="clickz-actions">
+          <div className="clickz-action-btn" onClick={(e) => handleLike(currentVideo.id, e)} title="Like">
+            {isLiked ? "❤️" : "🤍"}
+            <span>{currentVideo.likes || 0}</span>
           </div>
 
-          <div className="shorts-info">
-            <div className="shorts-profile">
+          {currentVideo.hasAffiliate && (
+            <div className="clickz-action-btn" onClick={(e) => { e.stopPropagation(); openProductCart(); }} title="Shop">
+              <ShoppingCart size={20} />
+              <span>Shop</span>
+            </div>
+          )}
 
-              {/* SHOW THE VIDEO OWNER, NOT CURRENT USER */}
-              <img src={currentVideo.userAvatar} alt="Profile" />
+          {currentVideo.hasLocation && (
+            <div className="clickz-action-btn" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(currentVideo.location || '')}`, '_blank')} title="Location">
+              📍
+              <span>Map</span>
+            </div>
+          )}
 
-              <div>
-                <div className="shorts-username">@{currentVideo.userName}</div>
-                <div className="shorts-title">{currentVideo.title}</div>
-                <div className="shorts-desc">{currentVideo.desc}</div>
-              </div>
+          <div className="clickz-action-btn" onClick={() => openComments(currentVideo.id)} title="Comments">
+            💬
+            <span>{commentCounts[currentVideo.id] || 0}</span>
+          </div>
 
-              {/* FOLLOW BUTTON FOR VIDEO OWNER */}
-              {currentVideo.userId !== currentUser.id && (
-                <button
-                  className={`follow-btn ${follows[currentVideo.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
-                  onClick={() => toggleFollowUser(currentVideo.userId)}
-                >
-                  {follows[currentVideo.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
-                </button>
+          <div className="clickz-action-btn" onClick={() => shareVideo(currentVideo)} title="Share">
+            📤
+            <span>Share</span>
+          </div>
+        </div>
+
+        {/* Profile / info (left bottom) */}
+        <div className="clickz-profile" style={{ left: 16, bottom: 20 }}>
+          <img src={owner?.avatar || currentUser?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} alt="Profile" />
+          <div>
+            <div className="clickz-username clickz-username-clickable" onClick={() => onUsernameClick && onUsernameClick(owner?.id)}>
+              @{owner?.username || currentUser?.name || 'Unknown'}
+            </div>
+            <div style={{ fontSize: 14, marginTop: 4, opacity: 0.8 }}>{currentVideo.title}</div>
+            <div style={{ fontSize: 12, marginTop: 2, opacity: 0.6 }}>{currentVideo.desc}</div>
+          </div>
+          {!isOwnerCurrentUser && (
+            <button
+              className={`follow-btn ${isFollowing ? 'followed' : ''}`}
+              onClick={(e) => handleFollow(owner?.id, e)}
+              style={{ marginLeft: 12 }}
+            >
+              {isFollowing ? "Following" : "Follow"}
+            </button>
+          )}
+        </div>
+
+        <div className="clickz-scroll-hint">Scroll to see more videos</div>
+      </div>
+
+      {/* Comments Panel */}
+      {showComments && currentVideo && (
+        <CommentsPanel
+          videoId={currentVideo.id}
+          currentUser={currentUser}
+          onClose={() => setShowComments(false)}
+          onCommentAdded={(videoId) => {
+            setCommentCounts(prev => ({ ...prev, [videoId]: (prev[videoId] || 0) + 1 }));
+          }}
+        />
+      )}
+
+      {/* Products Cart */}
+      {showProducts && (
+        <div className="products-cart-overlay" onClick={(e) => e.target.classList.contains('products-cart-overlay') && closeProductCart()}>
+          <div className="products-cart">
+            <div className="products-cart-header">
+              <h3>Products</h3>
+              <button className="close-cart-btn" onClick={closeProductCart}><X size={20} /></button>
+            </div>
+            <div className="products-cart-content">
+              {loadingProducts ? (
+                <div className="products-loading">Loading products...</div>
+              ) : products.length ? (
+                products.map(p => (
+                  <div key={p.id} className="product-item" onClick={() => window.open(p.product_url, '_blank')}>
+                    {p.image_url && <img src={p.image_url} className="product-image" alt={p.name} />}
+                    <div className="product-info">
+                      <h4 className="product-name">{p.name}</h4>
+                      {p.description && <p className="product-description">{p.description}</p>}
+                      {p.price && <p className="product-price">{p.price}</p>}
+                    </div>
+                    <div className="product-action"><ShoppingCart size={18} /></div>
+                  </div>
+                ))
+              ) : (
+                <div className="no-products">
+                  <p>No products available for this video.</p>
+                  {currentVideo.affiliateLink && <button className="btn btn-primary" onClick={() => window.open(currentVideo.affiliateLink, '_blank')}>Visit Affiliate Link</button>}
+                </div>
               )}
             </div>
           </div>
         </div>
-
-        <div className="shorts-counter">
-          {currentIndex + 1} / {videos.length}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
+
 
