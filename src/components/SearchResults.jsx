@@ -40,10 +40,10 @@ export function SearchResults({
                   {users.map((user) => (
                     <div key={user.id} className="user-result-card">
 
-                      <img src={user.avatar} alt={user.full_name} className="user-avatar" />
+                      <img src={user.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} alt={user.full_name || user.username} className="user-avatar" />
 
                       <div className="user-info">
-                        <div className="user-name">{user.full_name}</div>
+                        <div className="user-name">{user.full_name || user.username}</div>
                         <div className="user-username">@{user.username}</div>
                       </div>
 
@@ -106,4 +106,5 @@ export function SearchResults({
     </div>
   );
 }
+
 
