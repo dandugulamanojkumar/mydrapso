@@ -91,7 +91,7 @@ export function ShortsPlayer({
     setLikes((prev) => prev.includes(id) ? prev.filter((vid) => vid !== id) : [...prev, id]);
   };
 
-  const toggleFollow = (uid) => {
+  const toggleFollowUser = (uid) => {
     setFollows((prev) => {
       const copy = { ...prev };
       if (!copy[uid]) copy[uid] = [];
@@ -132,7 +132,6 @@ export function ShortsPlayer({
     buttons.push(
       <div key="like" className="shorts-action-btn" onClick={() => toggleLike(video.id)}>
         {likes.includes(video.id) ? "❤️" : "🤍"}
-        <span>{likes.filter(id => id === video.id).length}</span>
       </div>
     );
 
@@ -140,7 +139,6 @@ export function ShortsPlayer({
       buttons.push(
         <div key="cart" className="shorts-action-btn" onClick={() => window.open(video.affiliateLink, "_blank")}>
           🛒
-          <span>Shop</span>
         </div>
       );
     }
@@ -153,7 +151,6 @@ export function ShortsPlayer({
           onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(video.location || '')}`, "_blank")}
         >
           📍
-          <span>Map</span>
         </div>
       );
     }
@@ -161,14 +158,12 @@ export function ShortsPlayer({
     buttons.push(
       <div key="comment" className="shorts-action-btn" onClick={() => openComments(video.id)}>
         💬
-        <span>0</span>
       </div>
     );
 
     buttons.push(
       <div key="share" className="shorts-action-btn" onClick={() => shareVideo(video)}>
         📤
-        <span>Share</span>
       </div>
     );
 
@@ -191,7 +186,6 @@ export function ShortsPlayer({
             controls
             autoPlay
             loop
-            muted={false}
           />
 
           <div className="shorts-actions">
@@ -200,16 +194,21 @@ export function ShortsPlayer({
 
           <div className="shorts-info">
             <div className="shorts-profile">
-              <img src={currentUser.avatar} alt="Profile" />
+
+              {/* SHOW THE VIDEO OWNER, NOT CURRENT USER */}
+              <img src={currentVideo.userAvatar} alt="Profile" />
+
               <div>
-                <div className="shorts-username">@{currentUser.name}</div>
+                <div className="shorts-username">@{currentVideo.userName}</div>
                 <div className="shorts-title">{currentVideo.title}</div>
                 <div className="shorts-desc">{currentVideo.desc}</div>
               </div>
+
+              {/* FOLLOW BUTTON FOR VIDEO OWNER */}
               {currentVideo.userId !== currentUser.id && (
                 <button
                   className={`follow-btn ${follows[currentVideo.userId]?.includes(currentUser.id) ? 'followed' : ''}`}
-                  onClick={() => toggleFollow(currentVideo.userId)}
+                  onClick={() => toggleFollowUser(currentVideo.userId)}
                 >
                   {follows[currentVideo.userId]?.includes(currentUser.id) ? "Following" : "Follow"}
                 </button>
@@ -225,3 +224,4 @@ export function ShortsPlayer({
     </div>
   );
 }
+
