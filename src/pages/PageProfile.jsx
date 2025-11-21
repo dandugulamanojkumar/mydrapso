@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { updateUserProfile, uploadProfilePicture } from '../lib/supabase';
+import React, { useEffect, useState } from 'react';
+import { updateUserProfile, uploadProfilePicture, getUserProfile } from '../lib/supabase';
+import { FollowButton } from '../components/FollowButton';
 
 export function PageProfile({
   uploads = [],
@@ -8,25 +9,55 @@ export function PageProfile({
   setUploads,
   followingList = [],
   likedVideoIds = [],
-  onFollow,          // <-- FOLLOW FUNCTION FROM PARENT
-  onUsernameClick,   // <-- USERNAME CLICK REDIRECT
-  onVideoOpen        // <-- OPEN VIDEO IN CLICKZ PAGE
+  onFollow,
+  onUsernameClick,
+  onVideoOpen
 }) {
-  if (!profile) {
-    return (
-      <div className="profile-container">
-        <p>Loading profile...</p>
-      </div>
-    );
-  }
-
+  // local copy for viewing (profile prop may be current user or another)
+  const [viewProfile, setViewProfile] = useState(profile);
   const [isEditing, setIsEditing] = useState(false);
-  const [tempName, setTempName] = useState(profile.name);
-  const [tempBio, setTempBio] = useState(profile.bio || '');
-  const [tempAvatar, setTempAvatar] = useState(profile.avatar);
+  const [tempName, setTempName] = useState(profile?.name || '');
+  const [tempBio, setTempBio] = useState(profile?.bio || '');
+  const [tempAvatar, setTempAvatar] = useState(profile?.avatar || '');
   const [avatarFile, setAvatarFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setViewProfile(profile);
+    setTempName(profile?.name || '');
+    setTempBio(profile?.bio || '');
+    setTempAvatar(profile?.avatar || '');
+  }, [profile]);
+
+  // If parent passes a minimal profile for other users, try to fetch full
+  useEffect(() => {
+    let mounted = true;
+    const fetchFull = async () => {
+      if (!viewProfile || !viewProfile.id) return;
+      // if it already looks complete (has followerCount field) skip
+      if (viewProfile.followerCount !== undefined) return;
+      try {
+        const full = await getUserProfile(viewProfile.id);
+        if (full && mounted) {
+          const normalized = {
+            id: full.id,
+            name: full.username || full.full_name || full.name,
+            avatar: full.avatar,
+            bio: full.bio,
+            followerCount: full.follower_count || full.followerCount || 0,
+            followingCount: full.following_count || full.followingCount || 0,
+            isCurrentUser: viewProfile.isCurrentUser || false
+          };
+          setViewProfile(normalized);
+        }
+      } catch (err) {
+        console.error('PageProfile: failed to fetch full profile', err);
+      }
+    };
+    fetchFull();
+    return () => { mounted = false; };
+  }, [viewProfile?.id]);
 
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
@@ -41,17 +72,18 @@ export function PageProfile({
   };
 
   const handleSave = async () => {
+    if (!viewProfile || !viewProfile.isCurrentUser) return;
     setSaving(true);
     try {
-      let newAvatarUrl = profile.avatar;
+      let newAvatarUrl = viewProfile.avatar;
 
       if (avatarFile) {
         setUploading(true);
         try {
-          newAvatarUrl = await uploadProfilePicture(profile.id, avatarFile);
+          newAvatarUrl = await uploadProfilePicture(viewProfile.id, avatarFile);
         } catch (uploadError) {
           console.error('Upload avatar error:', uploadError);
-          alert(uploadError.message || 'Failed to upload profile picture.');
+          alert(uploadError.message || 'Failed to upload profile picture. Please try again.');
           setUploading(false);
           return;
         }
@@ -63,21 +95,19 @@ export function PageProfile({
         bio: tempBio
       };
 
-      if (avatarFile) {
-        updates.avatar = newAvatarUrl;
-      }
+      if (avatarFile) updates.avatar = newAvatarUrl;
 
-      await updateUserProfile(profile.id, updates);
+      await updateUserProfile(viewProfile.id, updates);
 
-      setProfile({
-        ...profile,
+      const updated = {
+        ...viewProfile,
         name: tempName,
         bio: tempBio,
-        avatar: newAvatarUrl,
-        followerCount: profile.followerCount,
-        followingCount: profile.followingCount
-      });
+        avatar: newAvatarUrl
+      };
 
+      setViewProfile(updated);
+      setProfile && setProfile(updated); // update parent if it's the same user
       localStorage.setItem("userData", JSON.stringify({
         ...JSON.parse(localStorage.getItem("userData") || "{}"),
         full_name: tempName,
@@ -87,44 +117,58 @@ export function PageProfile({
 
       setAvatarFile(null);
       setIsEditing(false);
-    } catch {
-      alert('Failed to update profile.');
+    } catch (error) {
+      console.error('Update profile error:', error);
+      alert('Failed to update profile. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleCancel = () => {
-    setTempName(profile.name);
-    setTempBio(profile.bio || '');
-    setTempAvatar(profile.avatar);
+    setTempName(viewProfile?.name || '');
+    setTempBio(viewProfile?.bio || '');
+    setTempAvatar(viewProfile?.avatar || '');
     setAvatarFile(null);
     setIsEditing(false);
   };
 
-  const myVideos = uploads.filter((vid) => vid.userId === profile.id);
+  // user's videos (ownerId may be viewProfile.id)
+  const myVideos = uploads.filter((vid) => vid.userId === viewProfile?.id);
 
-  // 🚀 FIX: FOLLOW STATUS (NO VARIABLE CHANGE)
-  const isFollowing = followingList.includes(profile.id);
+  // update local follower counts after follow toggle
+  const handleFollowToggle = (isNowFollowing) => {
+    setViewProfile(prev => prev ? ({ ...prev, followerCount: (prev.followerCount || 0) + (isNowFollowing ? 1 : -1) }) : prev);
+    // also inform parent to update global followingList if they provided onFollow
+    if (onFollow && profile?.id) {
+      // parent toggle already handles follow/unfollow logic — keep consistent
+      // we don't call onFollow here directly because FollowButton already did it
+    }
+  };
+
+  if (!viewProfile) {
+    return (
+      <div className="profile-container">
+        <p>Loading profile...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="profile-container">
-
-      {/* HEADER */}
       <div className="profile-header">
-
         <div className="profile-pic-wrapper">
-          <img src={profile.avatar} alt="Profile" className="profile-pic" />
+          <img src={viewProfile.avatar} alt="Profile" className="profile-pic" />
         </div>
 
-        <h2 className="profile-name">{profile.name}</h2>
+        <h2 className="profile-name">{viewProfile.name}</h2>
 
-        {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+        {viewProfile.bio && <p className="profile-bio">{viewProfile.bio}</p>}
 
-        {/* IF YOUR OWN PROFILE → EDIT BUTTON */}
-        {profile.isCurrentUser && (
-          <button 
-            className="edit-icon" 
+        {/* Edit for own profile */}
+        {viewProfile.isCurrentUser && (
+          <button
+            className="edit-icon"
             onClick={() => setIsEditing(true)}
             title="Edit Profile"
           >
@@ -132,40 +176,34 @@ export function PageProfile({
           </button>
         )}
 
-        {/* IF OTHER PERSON'S PROFILE → FOLLOW BUTTON */}
-        {!profile.isCurrentUser && (
-          <button 
-            className={`follow-btn ${isFollowing ? 'followed' : ''}`}
-            onClick={() => onFollow(profile.id)}
-          >
-            {isFollowing ? "Following" : "Follow"}
-          </button>
+        {/* Follow button for other user's profile */}
+        {!viewProfile.isCurrentUser && (
+          <FollowButton
+            viewerId={profile?.id}
+            targetId={viewProfile.id}
+            onToggle={handleFollowToggle}
+          />
         )}
-
       </div>
 
-      {/* COUNTS */}
       <div className="profile-stats">
-        <div><strong>{profile.followerCount || 0}</strong><span>Followers</span></div>
-        <div><strong>{profile.followingCount || 0}</strong><span>Following</span></div>
+        <div><strong>{viewProfile.followerCount || 0}</strong><span>Followers</span></div>
+        <div><strong>{viewProfile.followingCount || 0}</strong><span>Following</span></div>
         <div><strong>{myVideos.length}</strong><span>Videos</span></div>
       </div>
 
-      {/* VIDEO GRID */}
       <div className="profile-videos">
-        <h3>My Videos</h3>
+        <h3>Videos</h3>
 
         <div className="video-grid">
-
           {myVideos.map((vid) => (
-            <div 
-              key={vid.id} 
+            <div
+              key={vid.id}
               className="video-card-grid"
-              onClick={() => onVideoOpen && onVideoOpen(vid.id)}   // 🚀 OPEN VIDEO IN CLICKZ
+              onClick={() => onVideoOpen && onVideoOpen(vid.id)}
               style={{ cursor: "pointer" }}
             >
               <video src={vid.url} className="grid-video" />
-
               <div className="grid-video-info">
                 <p className="grid-video-title">{vid.title}</p>
                 <div className="grid-video-stats">
@@ -182,17 +220,14 @@ export function PageProfile({
               <p style={{ fontSize: '14px', opacity: 0.7 }}>Upload your first video!</p>
             </div>
           )}
-
         </div>
       </div>
 
-      {/* EDIT MODAL */}
-      {isEditing && (
+      {isEditing && viewProfile.isCurrentUser && (
         <div className="edit-modal">
           <div className="edit-content">
             <h3>Edit Profile</h3>
 
-            {/* Avatar */}
             <div className="edit-field">
               <label>Profile Picture:</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -202,13 +237,11 @@ export function PageProfile({
               <small>Max size 5MB</small>
             </div>
 
-            {/* Name */}
             <div className="edit-field">
               <label>Display Name:</label>
               <input type="text" value={tempName} onChange={(e) => setTempName(e.target.value)} />
             </div>
 
-            {/* Bio */}
             <div className="edit-field">
               <label>Bio:</label>
               <textarea
@@ -221,17 +254,15 @@ export function PageProfile({
             </div>
 
             <div className="edit-actions">
-              <button className="btn btn-primary" onClick={handleSave}>
-                Save
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving || uploading}>
+                {uploading ? 'Uploading...' : saving ? 'Saving...' : 'Save'}
               </button>
-              <button className="btn btn-ghost" onClick={handleCancel}>Cancel</button>
+              <button className="btn btn-ghost" onClick={handleCancel} disabled={saving}>Cancel</button>
             </div>
 
           </div>
         </div>
       )}
-
     </div>
   );
 }
-
