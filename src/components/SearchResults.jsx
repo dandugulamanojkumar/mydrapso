@@ -40,7 +40,11 @@ export function SearchResults({
                   {users.map((user) => (
                     <div key={user.id} className="user-result-card">
 
-                      <img src={user.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} alt={user.full_name || user.username} className="user-avatar" />
+                      <img
+                        src={user.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                        alt={user.full_name || user.username}
+                        className="user-avatar"
+                      />
 
                       <div className="user-info">
                         <div className="user-name">{user.full_name || user.username}</div>
@@ -51,7 +55,10 @@ export function SearchResults({
                         <FollowButton
                           viewerId={currentUser?.id}
                           targetId={user.id}
-                          onToggle={() => toggleFollow && toggleFollow(user.id)}
+                          // FollowButton will call this with isNowFollowing (true/false)
+                          onToggle={(isNowFollowing) =>
+                            toggleFollow && toggleFollow(user.id, isNowFollowing)
+                          }
                         />
                       )}
 
@@ -106,5 +113,6 @@ export function SearchResults({
     </div>
   );
 }
+
 
 
