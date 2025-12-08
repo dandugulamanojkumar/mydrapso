@@ -138,12 +138,13 @@ export function PageProfile({
 
   // update local follower counts after follow toggle
   const handleFollowToggle = (isNowFollowing) => {
-    setViewProfile(prev => prev ? ({ ...prev, followerCount: (prev.followerCount || 0) + (isNowFollowing ? 1 : -1) }) : prev);
-    // also inform parent to update global followingList if they provided onFollow
-    if (onFollow && profile?.id) {
-      // parent toggle already handles follow/unfollow logic — keep consistent
-      // we don't call onFollow here directly because FollowButton already did it
-    }
+    setViewProfile(prev => {
+      if (!prev) return prev;
+      const current = prev.followerCount || 0;
+      const next = isNowFollowing ? current + 1 : Math.max(current - 1, 0);
+      return { ...prev, followerCount: next };
+    });
+    // parent onFollow already handles DB logic if used elsewhere
   };
 
   if (!viewProfile) {
@@ -239,7 +240,11 @@ export function PageProfile({
 
             <div className="edit-field">
               <label>Display Name:</label>
-              <input type="text" value={tempName} onChange={(e) => setTempName(e.target.value)} />
+              <input
+                type="text"
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+              />
             </div>
 
             <div className="edit-field">
@@ -254,10 +259,20 @@ export function PageProfile({
             </div>
 
             <div className="edit-actions">
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving || uploading}>
+              <button
+                className="btn btn-primary"
+                onClick={handleSave}
+                disabled={saving || uploading}
+              >
                 {uploading ? 'Uploading...' : saving ? 'Saving...' : 'Save'}
               </button>
-              <button className="btn btn-ghost" onClick={handleCancel} disabled={saving}>Cancel</button>
+              <button
+                className="btn btn-ghost"
+                onClick={handleCancel}
+                disabled={saving}
+              >
+                Cancel
+              </button>
             </div>
 
           </div>
@@ -266,3 +281,4 @@ export function PageProfile({
     </div>
   );
 }
+
