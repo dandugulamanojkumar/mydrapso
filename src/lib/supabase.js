@@ -84,11 +84,6 @@ export const followUser = async (followerId, followingId) => {
   }
 
   if (data) {
-    await supabase.rpc('increment_follower_counts', {
-      follower_user_id: followerId,
-      following_user_id: followingId
-    });
-
     await supabase.from("notifications").insert([{
       user_id: followingId,
       actor_id: followerId,
@@ -107,11 +102,6 @@ export const unfollowUser = async (followerId, followingId) => {
     .eq("following_id", followingId);
 
   if (error) throw error;
-
-  await supabase.rpc('decrement_follower_counts', {
-    follower_user_id: followerId,
-    following_user_id: followingId
-  });
 };
 
 export const checkIfFollowing = async (followerId, followingId) => {

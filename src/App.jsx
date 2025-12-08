@@ -263,19 +263,30 @@ export default function App() {
       if (isFollowing) {
         await unfollowUser(profile.id, userId);
         setFollowingList(prev => prev.filter(id => id !== userId));
-        setProfile(prev => prev ? ({ ...prev, followingCount: Math.max((prev.followingCount || prev.following_count || 0) - 1, 0) }) : prev);
-        setUploads(prev => prev.map(v =>
-          v.userId === userId && v.user?.[0]
-            ? { ...v, users: [{ ...v.users[0], follower_count: Math.max((v.users[0].follower_count || 1) - 1, 0) }] }
-            : v
-        ));
       } else {
         await followUser(profile.id, userId);
         setFollowingList(prev => [...prev, userId]);
-        setProfile(prev => prev ? ({ ...prev, followingCount: (prev.followingCount || prev.following_count || 0) + 1 }) : prev);
+      }
+
+      const { data: updatedProfile } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", profile.id)
+        .maybeSingle();
+
+      if (updatedProfile) {
+        setProfile(updatedProfile);
+      }
+
+      const { data: updatedUploads } = await supabase
+        .from("videos")
+        .select("*, users(*)")
+        .eq("user_id", userId);
+
+      if (updatedUploads) {
         setUploads(prev => prev.map(v =>
-          v.userId === userId && v.user?.[0]
-            ? { ...v, users: [{ ...v.users[0], follower_count: (v.users[0].follower_count || 0) + 1 }] }
+          v.userId === userId
+            ? { ...v, users: updatedUploads[0]?.users || [] }
             : v
         ));
       }
