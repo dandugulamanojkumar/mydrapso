@@ -46,9 +46,9 @@ export default function App() {
   const [likedVideoIds, setLikedVideoIds] = useState([]);
   const [viewedVideoIds, setViewedVideoIds] = useState([]);
 
-  // NEW: which other user's profile to view (null => show current user's profile)
+  // which other user's profile to view (null => show current user's profile)
   const [viewProfileId, setViewProfileId] = useState(null);
-  // NEW: full data for external profile fetched from DB
+  // full data for external profile fetched from DB
   const [externalProfile, setExternalProfile] = useState(null);
 
   /* ===== UPLOAD STATE ===== */
@@ -88,6 +88,7 @@ export default function App() {
     setLikedVideoIds([]);
     setFollowingList([]);
     setViewProfileId(null);
+    setExternalProfile(null);
     setActivePage("home");
   };
 
@@ -115,7 +116,7 @@ export default function App() {
     setSelectedVideo(null);
   };
 
-  /* ===== SEARCH FUNCTION (NEW: queries Supabase directly) ===== */
+  /* ===== SEARCH FUNCTION (Supabase) ===== */
   const handleSearch = async (query) => {
     if (!query || !query.trim()) return;
 
@@ -123,7 +124,7 @@ export default function App() {
     setSearchQuery(q);
 
     try {
-      // Search users (username or full_name)
+      // Search users
       const { data: users, error: userError } = await supabase
         .from("users")
         .select("id, username, full_name, avatar, bio, follower_count, following_count")
@@ -134,7 +135,7 @@ export default function App() {
         console.error("User search error:", userError);
       }
 
-      // Search videos (title or description)
+      // Search videos
       const { data: videos, error: videoError } = await supabase
         .from("videos")
         .select("id, title, description, video_url, has_affiliate, affiliate_link, has_location, location, user_id, likes, views")
@@ -145,7 +146,6 @@ export default function App() {
         console.error("Video search error:", videoError);
       }
 
-      // Normalize video objects to match your front-end naming (title->title, description->desc, video_url->url)
       const formattedVideos = (videos || []).map(v => ({
         id: v.id,
         url: v.video_url,
@@ -160,7 +160,6 @@ export default function App() {
         views: v.views || 0
       }));
 
-      // Normalize user objects for front-end (use full_name and username)
       const formattedUsers = (users || []).map(u => ({
         id: u.id,
         username: u.username,
@@ -180,11 +179,10 @@ export default function App() {
     }
   };
 
-  // NEW: handle user click — fetch profile from DB and open profile page
+  // handle user click — fetch profile from DB and open profile page
   const handleUserClick = async (userId) => {
     if (!userId) return;
     try {
-      // If clicked own user, open own profile
       if (userId === profile?.id) {
         setViewProfileId(null);
         setExternalProfile(null);
@@ -195,7 +193,6 @@ export default function App() {
 
       const userData = await getUserProfile(userId);
       if (userData) {
-        // Map supabase user fields to the shape PageProfile expects
         const mapped = {
           id: userData.id,
           name: userData.username || userData.full_name || userData.fullname || userData.name,
@@ -203,13 +200,12 @@ export default function App() {
           bio: userData.bio || "",
           followerCount: userData.follower_count || 0,
           followingCount: userData.following_count || 0,
-          raw: userData // keep full raw if needed
+          raw: userData
         };
         setExternalProfile(mapped);
         setViewProfileId(userId);
         setActivePage('profile');
       } else {
-        // fallback: open profile page with id only
         setExternalProfile(null);
         setViewProfileId(userId);
         setActivePage('profile');
@@ -224,7 +220,6 @@ export default function App() {
     }
   };
 
-  // When clicking a video from search, open Inline player (keeps current app behavior)
   const handleVideoClick = (videoId) => {
     openInlinePlayer(videoId);
     setShowSearchResults(false);
@@ -254,6 +249,7 @@ export default function App() {
     }
   };
 
+  // Heavy follow/unfollow (Supabase) used in feeds / shorts / inline player
   const toggleFollow = async (userId) => {
     if (!profile || userId === profile.id) return;
 
@@ -295,12 +291,44 @@ export default function App() {
     }
   };
 
+  // 🔹 NEW: lightweight follow toggle ONLY for SearchResults (no Supabase here)
+  const handleSearchFollowToggle = (userId, isNowFollowing) => {
+    // update followingList in memory
+    setFollowingList(prev => {
+      if (isNowFollowing) {
+        if (prev.includes(userId)) return prev;
+        return [...prev, userId];
+      } else {
+        return prev.filter(id => id !== userId);
+      }
+    });
+
+    // update current user's followingCount in state
+    setProfile(prev => {
+      if (!prev) return prev;
+      const current =
+        prev.followingCount !== undefined
+          ? prev.followingCount
+          : prev.following_count || 0;
+      const next = isNowFollowing ? current + 1 : Math.max(current - 1, 0);
+      return { ...prev, followingCount: next };
+    });
+  };
+
   /* ===== PAGES ===== */
   const pages = useMemo(
     () => {
-      // decide profile to show: externalProfile (if viewing other user) or signed-in profile
       const profileToShow = viewProfileId ? externalProfile : profile;
-      const profileWithFlag = profileToShow ? ({ ...profileToShow, isCurrentUser: !!(profile && profile.id && (!viewProfileId || profile.id === viewProfileId)) }) : null;
+      const profileWithFlag = profileToShow
+        ? ({
+            ...profileToShow,
+            isCurrentUser: !!(
+              profile &&
+              profile.id &&
+              (!viewProfileId || profile.id === viewProfileId)
+            )
+          })
+        : null;
 
       return {
         home: (
@@ -474,7 +502,7 @@ export default function App() {
         getUserFollows(userId)
       ]);
 
-      const formattedVideos = videosData.map(video => ( {
+      const formattedVideos = videosData.map(video => ({
         id: video.id,
         url: video.video_url,
         name: video.title,
@@ -489,7 +517,7 @@ export default function App() {
         likes: video.likes,
         views: video.views,
         user: video.users,
-      } ) );
+      }));
 
       setUploads(formattedVideos);
       setLikedVideoIds(likesData);
@@ -724,7 +752,8 @@ export default function App() {
           onClose={() => setShowSearchResults(false)}
           currentUser={profile}
           follows={followingList}
-          toggleFollow={toggleFollow}
+          // use lightweight handler here (no extra Supabase)
+          toggleFollow={handleSearchFollowToggle}
         />
       )}
 
@@ -755,5 +784,6 @@ export default function App() {
     </div>
   );
 }
+
 
 
