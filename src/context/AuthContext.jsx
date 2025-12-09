@@ -1,4 +1,5 @@
-import React, { createContext, useState, useEffect } from 'react';
+// src/context/AuthContext.jsx
+import React, { createContext, useState, useEffect, useContext } from 'react';
 import { supabase } from '../lib/supabase';
 
 export const AuthContext = createContext();
@@ -10,7 +11,9 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        const {
+          data: { session: existingSession },
+        } = await supabase.auth.getSession();
         setSession(existingSession);
       } catch (error) {
         console.error('Auth init error:', error);
@@ -21,7 +24,9 @@ export function AuthProvider({ children }) {
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
     });
 
@@ -38,9 +43,10 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  const context = React.useContext(AuthContext);
+  const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within AuthProvider');
   }
   return context;
 }
+
