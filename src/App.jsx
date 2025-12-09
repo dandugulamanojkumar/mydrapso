@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "./context/AuthContext";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
 import { UploadModal } from "./components/UploadModal";
@@ -30,6 +31,7 @@ import {
 import "./styles.css";
 
 export default function App() {
+  const { session, loading: authLoading } = useAuth();
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState("home");
@@ -427,9 +429,9 @@ export default function App() {
 
   /* ===== AUTH HANDLERS ===== */
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    if (authLoading) return;
 
+    const initializeAuth = async () => {
       if (session?.user) {
         const { data: userData, error } = await supabase
           .from('users')
@@ -450,33 +452,7 @@ export default function App() {
           });
           await loadInitialData(userData.id);
         }
-      }
-    };
-
-    checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .maybeSingle();
-
-        if (userData) {
-          localStorage.setItem("userData", JSON.stringify(userData));
-          setIsLoggedIn(true);
-          setProfile({
-            id: userData.id,
-            name: userData.username || userData.full_name,
-            avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
-            bio: userData.bio || "",
-            followerCount: userData.follower_count || 0,
-            followingCount: userData.following_count || 0,
-          });
-          await loadInitialData(userData.id);
-        }
-      } else if (event === 'SIGNED_OUT') {
+      } else {
         localStorage.removeItem("userData");
         setIsLoggedIn(false);
         setProfile(null);
@@ -486,12 +462,10 @@ export default function App() {
         setViewProfileId(null);
         setExternalProfile(null);
       }
-    });
-
-    return () => {
-      subscription?.unsubscribe();
     };
-  }, []);
+
+    initializeAuth();
+  }, [session, authLoading]);
 
   const loadInitialData = async (userId) => {
     setVideosLoading(true);
@@ -680,6 +654,15 @@ export default function App() {
       }
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="loading-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div className="loading-spinner"></div>
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   if (!isLoggedIn || !profile) {
     if (showSignUp) {
