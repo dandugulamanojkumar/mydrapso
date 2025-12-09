@@ -77,28 +77,35 @@ export const getUserLikes = async (userId) => {
   if (error) throw error;
   return data.map(like => like.video_id);
 };
-
 export const followUser = async (followerId, followingId) => {
+  // Insert into follows
   const { data, error } = await supabase
     .from("follows")
     .insert([{ follower_id: followerId, following_id: followingId }])
     .select()
     .single();
 
-  if (error && error.code !== '23505') {
+  // If it's a duplicate (already following), ignore that specific error
+  if (error && error.code !== "23505") {
+    console.error("followUser: error inserting into follows", error);
     throw error;
   }
 
+  // Try to create a notification, but don't break follow if this fails
   if (data) {
-    await supabase.from("notifications").insert([{
-      user_id: followingId,
-      actor_id: followerId,
-      type: "follow"
-    }]);
+    const { error: notifError } = await supabase
+      .from("notifications")
+      .insert([{ user_id: followingId, actor_id: followerId, type: "follow" }]);
+
+    if (notifError) {
+      console.error("followUser: notification insert failed", notifError);
+      // DO NOT throw here – follow should still succeed
+    }
   }
 
   return data;
 };
+
 
 export const unfollowUser = async (followerId, followingId) => {
   const { error } = await supabase
