@@ -254,6 +254,11 @@ export default function App() {
     openInlinePlayer(videoId);
     setShowSearchResults(false);
   };
+  const handleCloseSearchResults = () => {
+    setShowSearchResults(false);
+    setSearchQuery("");                    
+    setSearchResults({ users: [], videos: [] }); 
+  };
 
   const toggleLike = async (videoId) => {
     if (!profile) return;
