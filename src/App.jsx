@@ -749,15 +749,18 @@ export default function App() {
 
   return (
     <div className="app-wrapper">
-      <Topbar
+            <Topbar
         theme={theme}
         setTheme={setTheme}
         openModal={() => {
           setShowModal(true);
           setStep(1);
         }}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
         onSearch={handleSearch}
       />
+
       <Sidebar
         sidebarCollapsed={sidebarCollapsed}
         setSidebarCollapsed={setSidebarCollapsed}
@@ -795,15 +798,16 @@ export default function App() {
         />
       )}
 
-      {showSearchResults && (
+           {showSearchResults && (
         <SearchResults
           searchQuery={searchQuery}
           searchResults={searchResults}
           onUserClick={handleUserClick}
           onVideoClick={handleVideoClick}
-          onClose={() => setShowSearchResults(false)}
+          onClose={handleCloseSearchResults}
           currentUser={profile}
           follows={followingList}
+          // use lightweight handler here (no extra Supabase)
           toggleFollow={handleSearchFollowToggle}
         />
       )}
