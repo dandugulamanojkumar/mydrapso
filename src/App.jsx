@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useAuth } from "./context/AuthContext";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
@@ -35,6 +35,7 @@ export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "dark");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState("home");
+  const [previousPage, setPreviousPage] = useState("home"); // for Back button
   const [uploads, setUploads] = useState([]);
 
   /* ===== AUTH STATE ===== */
@@ -43,7 +44,7 @@ export default function App() {
   const [videosLoading, setVideosLoading] = useState(false);
 
   /* ===== USER SYSTEM ===== */
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(null); // logged-in user
   const [followingList, setFollowingList] = useState([]);
   const [likedVideoIds, setLikedVideoIds] = useState([]);
   const [viewedVideoIds, setViewedVideoIds] = useState([]);
@@ -92,20 +93,21 @@ export default function App() {
     setViewProfileId(null);
     setExternalProfile(null);
     setActivePage("home");
+    setPreviousPage("home");
   };
 
   /* ===== INLINE VIDEO PLAYER FUNCTIONS ===== */
   const openInlinePlayer = async (videoId) => {
-    const video = uploads.find(v => v.id === videoId);
+    const video = uploads.find((v) => v.id === videoId);
     if (video) {
       setSelectedVideo(video);
       setShowInlinePlayer(true);
 
       if (!viewedVideoIds.includes(videoId)) {
         await incrementVideoViews(videoId);
-        setViewedVideoIds(prev => [...prev, videoId]);
-        setUploads(prevUploads =>
-          prevUploads.map(v =>
+        setViewedVideoIds((prev) => [...prev, videoId]);
+        setUploads((prevUploads) =>
+          prevUploads.map((v) =>
             v.id === videoId ? { ...v, views: (v.views || 0) + 1 } : v
           )
         );
@@ -118,6 +120,16 @@ export default function App() {
     setSelectedVideo(null);
   };
 
+  /* ===== SIDEBAR PAGE SWITCH (fix my profile bug) ===== */
+  const handleSetActivePage = useCallback((page) => {
+    if (page === "profile") {
+      // When user clicks "Profile" in sidebar, ALWAYS show own profile
+      setViewProfileId(null);
+      setExternalProfile(null);
+    }
+    setActivePage(page);
+  }, []);
+
   /* ===== SEARCH FUNCTION (Supabase) ===== */
   const handleSearch = async (query) => {
     if (!query || !query.trim()) return;
@@ -129,7 +141,9 @@ export default function App() {
       // Search users
       const { data: users, error: userError } = await supabase
         .from("users")
-        .select("id, username, full_name, avatar, bio, follower_count, following_count")
+        .select(
+          "id, username, full_name, avatar, bio, follower_count, following_count"
+        )
         .or(`username.ilike.%${q}%,full_name.ilike.%${q}%`)
         .limit(50);
 
@@ -140,7 +154,9 @@ export default function App() {
       // Search videos
       const { data: videos, error: videoError } = await supabase
         .from("videos")
-        .select("id, title, description, video_url, has_affiliate, affiliate_link, has_location, location, user_id, likes, views")
+        .select(
+          "id, title, description, video_url, has_affiliate, affiliate_link, has_location, location, user_id, likes, views"
+        )
         .or(`title.ilike.%${q}%,description.ilike.%${q}%`)
         .limit(50);
 
@@ -148,7 +164,7 @@ export default function App() {
         console.error("Video search error:", videoError);
       }
 
-      const formattedVideos = (videos || []).map(v => ({
+      const formattedVideos = (videos || []).map((v) => ({
         id: v.id,
         url: v.video_url,
         title: v.title,
@@ -162,7 +178,7 @@ export default function App() {
         views: v.views || 0
       }));
 
-      const formattedUsers = (users || []).map(u => ({
+      const formattedUsers = (users || []).map((u) => ({
         id: u.id,
         username: u.username,
         full_name: u.full_name,
@@ -184,11 +200,16 @@ export default function App() {
   // handle user click — fetch profile from DB and open profile page
   const handleUserClick = async (userId) => {
     if (!userId) return;
+
+    // remember previous page so Back button can return
+    setPreviousPage(activePage);
+
     try {
+      // if it's me, just open my profile and reset external view
       if (userId === profile?.id) {
         setViewProfileId(null);
         setExternalProfile(null);
-        setActivePage('profile');
+        setActivePage("profile");
         setShowSearchResults(false);
         return;
       }
@@ -197,8 +218,15 @@ export default function App() {
       if (userData) {
         const mapped = {
           id: userData.id,
-          name: userData.username || userData.full_name || userData.fullname || userData.name,
-          avatar: userData.avatar || userData.avatar_url || "https://i.pravatar.cc/50?img=3",
+          name:
+            userData.username ||
+            userData.full_name ||
+            userData.fullname ||
+            userData.name,
+          avatar:
+            userData.avatar ||
+            userData.avatar_url ||
+            "https://i.pravatar.cc/50?img=3",
           bio: userData.bio || "",
           followerCount: userData.follower_count || 0,
           followingCount: userData.following_count || 0,
@@ -206,17 +234,17 @@ export default function App() {
         };
         setExternalProfile(mapped);
         setViewProfileId(userId);
-        setActivePage('profile');
+        setActivePage("profile");
       } else {
         setExternalProfile(null);
         setViewProfileId(userId);
-        setActivePage('profile');
+        setActivePage("profile");
       }
     } catch (err) {
       console.error("Get user profile error:", err);
       setExternalProfile(null);
       setViewProfileId(userId);
-      setActivePage('profile');
+      setActivePage("profile");
     } finally {
       setShowSearchResults(false);
     }
@@ -235,16 +263,22 @@ export default function App() {
 
       if (isLiked) {
         await unlikeVideo(videoId, profile.id);
-        setLikedVideoIds(prev => prev.filter(id => id !== videoId));
-        setUploads(prev => prev.map(v =>
-          v.id === videoId ? { ...v, likes: Math.max((v.likes || 1) - 1, 0) } : v
-        ));
+        setLikedVideoIds((prev) => prev.filter((id) => id !== videoId));
+        setUploads((prev) =>
+          prev.map((v) =>
+            v.id === videoId
+              ? { ...v, likes: Math.max((v.likes || 1) - 1, 0) }
+              : v
+          )
+        );
       } else {
         await likeVideo(videoId, profile.id);
-        setLikedVideoIds(prev => [...prev, videoId]);
-        setUploads(prev => prev.map(v =>
-          v.id === videoId ? { ...v, likes: (v.likes || 0) + 1 } : v
-        ));
+        setLikedVideoIds((prev) => [...prev, videoId]);
+        setUploads((prev) =>
+          prev.map((v) =>
+            v.id === videoId ? { ...v, likes: (v.likes || 0) + 1 } : v
+          )
+        );
       }
     } catch (error) {
       console.error("Toggle like error:", error);
@@ -260,10 +294,10 @@ export default function App() {
 
       if (isFollowing) {
         await unfollowUser(profile.id, userId);
-        setFollowingList(prev => prev.filter(id => id !== userId));
+        setFollowingList((prev) => prev.filter((id) => id !== userId));
       } else {
         await followUser(profile.id, userId);
-        setFollowingList(prev => [...prev, userId]);
+        setFollowingList((prev) => [...prev, userId]);
       }
 
       const { data: updatedProfile } = await supabase
@@ -282,31 +316,31 @@ export default function App() {
         .eq("user_id", userId);
 
       if (updatedUploads) {
-        setUploads(prev => prev.map(v =>
-          v.userId === userId
-            ? { ...v, users: updatedUploads[0]?.users || [] }
-            : v
-        ));
+        setUploads((prev) =>
+          prev.map((v) =>
+            v.userId === userId
+              ? { ...v, users: updatedUploads[0]?.users || [] }
+              : v
+          )
+        );
       }
     } catch (error) {
       console.error("Toggle follow error:", error);
     }
   };
 
-  // 🔹 NEW: lightweight follow toggle ONLY for SearchResults (no Supabase here)
+  // lightweight follow toggle ONLY for SearchResults (no extra Supabase here)
   const handleSearchFollowToggle = (userId, isNowFollowing) => {
-    // update followingList in memory
-    setFollowingList(prev => {
+    setFollowingList((prev) => {
       if (isNowFollowing) {
         if (prev.includes(userId)) return prev;
         return [...prev, userId];
       } else {
-        return prev.filter(id => id !== userId);
+        return prev.filter((id) => id !== userId);
       }
     });
 
-    // update current user's followingCount in state
-    setProfile(prev => {
+    setProfile((prev) => {
       if (!prev) return prev;
       const current =
         prev.followingCount !== undefined
@@ -317,90 +351,105 @@ export default function App() {
     });
   };
 
-  /* ===== PAGES ===== */
-  const pages = useMemo(
-    () => {
-      const profileToShow = viewProfileId ? externalProfile : profile;
-      const profileWithFlag = profileToShow
-        ? ({
-            ...profileToShow,
-            isCurrentUser: !!(
-              profile &&
-              profile.id &&
-              (!viewProfileId || profile.id === viewProfileId)
-            )
-          })
-        : null;
+  /* ===== BACK FROM OTHER USER PROFILE ===== */
+  const handleProfileBack = useCallback(() => {
+    // Clear external profile and go back to previous page
+    setViewProfileId(null);
+    setExternalProfile(null);
+    setActivePage(previousPage || "home");
+  }, [previousPage]);
 
-      return {
-        home: (
-          <VideosFeed
-            uploads={shuffleArray(uploads)}
-            currentUser={profile}
-            likedVideoIds={likedVideoIds}
-            followingList={followingList}
-            onLike={toggleLike}
-            onFollow={toggleFollow}
-            onUsernameClick={handleUserClick}
-            onVideoClick={openInlinePlayer}
-          />
-        ),
-        shorts: (
-          <PageShorts
-            uploads={uploads}
-            currentUser={profile}
-            likedVideoIds={likedVideoIds}
-            followingList={followingList}
-            onLike={toggleLike}
-            onFollow={toggleFollow}
-            onUsernameClick={handleUserClick}
-          />
-        ),
-        liked: (
-          <VideosFeed
-            uploads={uploads.filter((v) => likedVideoIds.includes(v.id))}
-            currentUser={profile}
-            likedVideoIds={likedVideoIds}
-            followingList={followingList}
-            onLike={toggleLike}
-            onFollow={toggleFollow}
-            onUsernameClick={handleUserClick}
-            onVideoClick={openInlinePlayer}
-          />
-        ),
-        profile: (
-          <PageProfile
-            profile={profileWithFlag}
-            setProfile={setProfile}
-            uploads={uploads}
-            setUploads={setUploads}
-            followingList={followingList}
-            likedVideoIds={likedVideoIds}
-            onFollow={toggleFollow}
-            onUsernameClick={handleUserClick}
-            onVideoOpen={openInlinePlayer}
-          />
-        ),
-        settings: <PageSettings onLogout={handleLogout} />,
-        notifications: <PageNotifications currentUser={profile} />,
-        videos: (
-          <VideosFeed
-            uploads={uploads.filter((v) => v.userId === profile?.id)}
-            currentUser={profile}
-            likedVideoIds={likedVideoIds}
-            followingList={followingList}
-            onLike={toggleLike}
-            onFollow={toggleFollow}
-            allowDelete={true}
-            setUploads={setUploads}
-            onUsernameClick={handleUserClick}
-            onVideoClick={openInlinePlayer}
-          />
-        ),
-      };
-    },
-    [uploads, likedVideoIds, followingList, profile, viewProfileId, externalProfile]
-  );
+  /* ===== PAGES ===== */
+  const pages = useMemo(() => {
+    const profileToShow = viewProfileId ? externalProfile : profile;
+    const profileWithFlag = profileToShow
+      ? {
+          ...profileToShow,
+          isCurrentUser: !!(
+            profile &&
+            profile.id &&
+            (!viewProfileId || profile.id === viewProfileId)
+          )
+        }
+      : null;
+
+    return {
+      home: (
+        <VideosFeed
+          uploads={shuffleArray(uploads)}
+          currentUser={profile}
+          likedVideoIds={likedVideoIds}
+          followingList={followingList}
+          onLike={toggleLike}
+          onFollow={toggleFollow}
+          onUsernameClick={handleUserClick}
+          onVideoClick={openInlinePlayer}
+        />
+      ),
+      shorts: (
+        <PageShorts
+          uploads={uploads}
+          currentUser={profile}
+          likedVideoIds={likedVideoIds}
+          followingList={followingList}
+          onLike={toggleLike}
+          onFollow={toggleFollow}
+          onUsernameClick={handleUserClick}
+        />
+      ),
+      liked: (
+        <VideosFeed
+          uploads={uploads.filter((v) => likedVideoIds.includes(v.id))}
+          currentUser={profile}
+          likedVideoIds={likedVideoIds}
+          followingList={followingList}
+          onLike={toggleLike}
+          onFollow={toggleFollow}
+          onUsernameClick={handleUserClick}
+          onVideoClick={openInlinePlayer}
+        />
+      ),
+      profile: (
+        <PageProfile
+          profile={profileWithFlag}        // profile being viewed (me or other)
+          currentUser={profile}            // logged-in user
+          setProfile={setProfile}
+          uploads={uploads}
+          setUploads={setUploads}
+          followingList={followingList}
+          likedVideoIds={likedVideoIds}
+          onFollow={toggleFollow}
+          onUsernameClick={handleUserClick}
+          onVideoOpen={openInlinePlayer}
+          onBack={viewProfileId ? handleProfileBack : undefined}
+        />
+      ),
+      settings: <PageSettings onLogout={handleLogout} />,
+      notifications: <PageNotifications currentUser={profile} />,
+      videos: (
+        <VideosFeed
+          uploads={uploads.filter((v) => v.userId === profile?.id)}
+          currentUser={profile}
+          likedVideoIds={likedVideoIds}
+          followingList={followingList}
+          onLike={toggleLike}
+          onFollow={toggleFollow}
+          allowDelete={true}
+          setUploads={setUploads}
+          onUsernameClick={handleUserClick}
+          onVideoClick={openInlinePlayer}
+        />
+      )
+    };
+  }, [
+    uploads,
+    likedVideoIds,
+    followingList,
+    profile,
+    viewProfileId,
+    externalProfile,
+    handleProfileBack
+  ]);
 
   /* ===== FILE PICKER ===== */
   const onPickFile = (e) => {
@@ -434,9 +483,9 @@ export default function App() {
     const initializeAuth = async () => {
       if (session?.user) {
         const { data: userData, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
+          .from("users")
+          .select("*")
+          .eq("id", session.user.id)
           .maybeSingle();
 
         if (!error && userData) {
@@ -448,7 +497,7 @@ export default function App() {
             avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
             bio: userData.bio || "",
             followerCount: userData.follower_count || 0,
-            followingCount: userData.following_count || 0,
+            followingCount: userData.following_count || 0
           });
           await loadInitialData(userData.id);
         }
@@ -461,6 +510,8 @@ export default function App() {
         setFollowingList([]);
         setViewProfileId(null);
         setExternalProfile(null);
+        setActivePage("home");
+        setPreviousPage("home");
       }
     };
 
@@ -476,7 +527,7 @@ export default function App() {
         getUserFollows(userId)
       ]);
 
-      const formattedVideos = videosData.map(video => ({
+      const formattedVideos = videosData.map((video) => ({
         id: video.id,
         url: video.video_url,
         name: video.title,
@@ -490,7 +541,7 @@ export default function App() {
         userId: video.user_id,
         likes: video.likes,
         views: video.views,
-        user: video.users,
+        user: video.users
       }));
 
       setUploads(formattedVideos);
@@ -507,13 +558,13 @@ export default function App() {
     if (!isLoggedIn || !profile) return;
 
     const unsubscribe = subscribeToVideos(async (payload) => {
-      if (payload.eventType === 'INSERT') {
+      if (payload.eventType === "INSERT") {
         const newVideo = payload.new;
 
         const { data: userData } = await supabase
-          .from('users')
-          .select('id, username, avatar, full_name')
-          .eq('id', newVideo.user_id)
+          .from("users")
+          .select("id, username, avatar, full_name")
+          .eq("id", newVideo.user_id)
           .single();
 
         const formattedVideo = {
@@ -530,28 +581,30 @@ export default function App() {
           userId: newVideo.user_id,
           likes: newVideo.likes || 0,
           views: newVideo.views || 0,
-          user: userData,
+          user: userData
         };
 
-        setUploads(prev => {
-          if (prev.some(v => v.id === formattedVideo.id)) {
+        setUploads((prev) => {
+          if (prev.some((v) => v.id === formattedVideo.id)) {
             return prev;
           }
           return [formattedVideo, ...prev];
         });
-      } else if (payload.eventType === 'DELETE') {
-        setUploads(prev => prev.filter(v => v.id !== payload.old.id));
-      } else if (payload.eventType === 'UPDATE') {
-        setUploads(prev => prev.map(v => {
-          if (v.id === payload.new.id) {
-            return {
-              ...v,
-              likes: payload.new.likes,
-              views: payload.new.views,
-            };
-          }
-          return v;
-        }));
+      } else if (payload.eventType === "DELETE") {
+        setUploads((prev) => prev.filter((v) => v.id !== payload.old.id));
+      } else if (payload.eventType === "UPDATE") {
+        setUploads((prev) =>
+          prev.map((v) => {
+            if (v.id === payload.new.id) {
+              return {
+                ...v,
+                likes: payload.new.likes,
+                views: payload.new.views
+              };
+            }
+            return v;
+          })
+        );
       }
     });
 
@@ -568,7 +621,7 @@ export default function App() {
       avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
       bio: userData.bio || "",
       followerCount: userData.follower_count || 0,
-      followingCount: userData.following_count || 0,
+      followingCount: userData.following_count || 0
     });
     await loadInitialData(userData.id);
   };
@@ -582,7 +635,7 @@ export default function App() {
       avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
       bio: userData.bio || "",
       followerCount: userData.follower_count || 0,
-      followingCount: userData.following_count || 0,
+      followingCount: userData.following_count || 0
     });
     await loadInitialData(userData.id);
   };
@@ -599,7 +652,7 @@ export default function App() {
     const uploadButton = e.target.querySelector('button[type="submit"]');
     if (uploadButton) {
       uploadButton.disabled = true;
-      uploadButton.textContent = 'Uploading...';
+      uploadButton.textContent = "Uploading...";
     }
 
     try {
@@ -610,7 +663,7 @@ export default function App() {
         hasAffiliate: !!showAffiliate,
         affiliateLink: showAffiliate ? affiliateLink.trim() : null,
         hasLocation: !!showLocation,
-        location: showLocation ? locationText.trim() : null,
+        location: showLocation ? locationText.trim() : null
       };
 
       const video = await uploadVideo(profile.id, videoMeta.file, metadata);
@@ -629,7 +682,7 @@ export default function App() {
         userId: video.user_id,
         user: video.user,
         likes: video.likes || 0,
-        views: video.views || 0,
+        views: video.views || 0
       };
 
       setUploads((prev) => [record, ...prev]);
@@ -650,14 +703,22 @@ export default function App() {
       alert(error.message || "Failed to upload video. Please try again.");
       if (uploadButton) {
         uploadButton.disabled = false;
-        uploadButton.textContent = 'Upload';
+        uploadButton.textContent = "Upload";
       }
     }
   };
 
   if (authLoading) {
     return (
-      <div className="loading-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div
+        className="loading-container"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: "100vh"
+        }}
+      >
         <div className="loading-spinner"></div>
         <p>Loading...</p>
       </div>
@@ -696,9 +757,12 @@ export default function App() {
         sidebarCollapsed={sidebarCollapsed}
         setSidebarCollapsed={setSidebarCollapsed}
         activePage={activePage}
-        setActivePage={setActivePage}
+        setActivePage={handleSetActivePage}
       />
-      <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`} id="main-content">
+      <main
+        className={`content ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
+        id="main-content"
+      >
         <div className="loaded-page">
           {videosLoading ? (
             <div className="loading-container">
@@ -735,7 +799,6 @@ export default function App() {
           onClose={() => setShowSearchResults(false)}
           currentUser={profile}
           follows={followingList}
-          // use lightweight handler here (no extra Supabase)
           toggleFollow={handleSearchFollowToggle}
         />
       )}
@@ -767,6 +830,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
