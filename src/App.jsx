@@ -66,6 +66,15 @@ export default function App() {
   const [locationText, setLocationText] = useState("");
   const fileInputRef = useRef(null);
 
+  // NEW: upload progress state
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadBytesSent, setUploadBytesSent] = useState(0);
+  const [uploadBytesTotal, setUploadBytesTotal] = useState(0);
+  const [uploadEtaSeconds, setUploadEtaSeconds] = useState(null);
+  const uploadProgressTimerRef = useRef(null);
+  const uploadCancelledRef = useRef(false);
+
   /* ===== INLINE VIDEO PLAYER STATE ===== */
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(null);
@@ -254,10 +263,11 @@ export default function App() {
     openInlinePlayer(videoId);
     setShowSearchResults(false);
   };
+
   const handleCloseSearchResults = () => {
     setShowSearchResults(false);
-    setSearchQuery("");                    
-    setSearchResults({ users: [], videos: [] }); 
+    setSearchQuery("");
+    setSearchResults({ users: [], videos: [] });
   };
 
   const toggleLike = async (videoId) => {
@@ -647,6 +657,66 @@ export default function App() {
 
   /* ===== UPLOAD ===== */
   const canUpload = title.trim() && desc.trim();
+
+  // start progress simulation using file size
+  const startFakeUploadProgress = (fileSize) => {
+    if (!fileSize) return;
+    if (uploadProgressTimerRef.current) {
+      clearInterval(uploadProgressTimerRef.current);
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadBytesSent(0);
+    setUploadBytesTotal(fileSize);
+    setUploadEtaSeconds(null);
+
+    const averageSpeedBytesPerSec = 2 * 1024 * 1024; // ~2 MB/s fake
+    const startedAt = Date.now();
+
+    uploadProgressTimerRef.current = setInterval(() => {
+      setUploadProgress((prevPercent) => {
+        const elapsedSec = (Date.now() - startedAt) / 1000;
+        const estimatedTotalSec = fileSize / averageSpeedBytesPerSec;
+        const eta = Math.max(Math.round(estimatedTotalSec - elapsedSec), 0);
+        setUploadEtaSeconds(eta);
+
+        const estimatedSent = Math.min(
+          elapsedSec * averageSpeedBytesPerSec,
+          fileSize
+        );
+        setUploadBytesSent(estimatedSent);
+
+        const nextPercent = Math.min(
+          (estimatedSent / fileSize) * 100,
+          95 // stop at 95% until real upload finishes
+        );
+        return nextPercent;
+      });
+    }, 500);
+  };
+
+  const resetUploadProgressState = () => {
+    if (uploadProgressTimerRef.current) {
+      clearInterval(uploadProgressTimerRef.current);
+      uploadProgressTimerRef.current = null;
+    }
+    setUploading(false);
+    setUploadProgress(0);
+    setUploadBytesSent(0);
+    setUploadBytesTotal(0);
+    setUploadEtaSeconds(null);
+    uploadCancelledRef.current = false;
+  };
+
+  const handleCancelUpload = () => {
+    // This cancels the UI progress and closes modal.
+    // It does NOT stop the underlying network request from uploadVideo.
+    uploadCancelledRef.current = true;
+    resetUploadProgressState();
+    setShowModal(false);
+  };
+
   const submitUpload = async (e) => {
     e.preventDefault();
     if (!videoMeta) {
@@ -660,7 +730,12 @@ export default function App() {
       uploadButton.textContent = "Uploading...";
     }
 
+    uploadCancelledRef.current = false;
+
     try {
+      const fileSize = videoMeta.file.size;
+      startFakeUploadProgress(fileSize);
+
       const metadata = {
         title: title.trim(),
         description: desc.trim(),
@@ -672,6 +747,17 @@ export default function App() {
       };
 
       const video = await uploadVideo(profile.id, videoMeta.file, metadata);
+
+      // If user cancelled while upload was in progress, just reset and stop.
+      if (uploadCancelledRef.current) {
+        resetUploadProgressState();
+        return;
+      }
+
+      // complete progress
+      setUploadProgress(100);
+      setUploadBytesSent(fileSize);
+      setUploadEtaSeconds(0);
 
       const record = {
         id: video.id,
@@ -710,6 +796,8 @@ export default function App() {
         uploadButton.disabled = false;
         uploadButton.textContent = "Upload";
       }
+    } finally {
+      resetUploadProgressState();
     }
   };
 
@@ -749,7 +837,7 @@ export default function App() {
 
   return (
     <div className="app-wrapper">
-            <Topbar
+      <Topbar
         theme={theme}
         setTheme={setTheme}
         openModal={() => {
@@ -798,7 +886,7 @@ export default function App() {
         />
       )}
 
-           {showSearchResults && (
+      {showSearchResults && (
         <SearchResults
           searchQuery={searchQuery}
           searchResults={searchResults}
@@ -834,11 +922,19 @@ export default function App() {
           setLocationText={setLocationText}
           canUpload={canUpload}
           submitUpload={submitUpload}
+          // NEW props for progress UI
+          uploading={uploading}
+          uploadProgress={uploadProgress}
+          uploadBytesSent={uploadBytesSent}
+          uploadBytesTotal={uploadBytesTotal}
+          uploadEtaSeconds={uploadEtaSeconds}
+          onCancelUpload={handleCancelUpload}
         />
       )}
     </div>
   );
 }
+
 
 
 
