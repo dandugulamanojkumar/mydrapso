@@ -1,4 +1,3 @@
-// src/components/UploadModal.jsx
 import React from "react";
 
 export function UploadModal(props) {
@@ -23,13 +22,14 @@ export function UploadModal(props) {
     setLocationText,
     canUpload,
     submitUpload,
-    // upload state
+    // NEW
     uploading,
     onCancelUpload,
   } = props;
 
   const handleOuterClick = (e) => {
     if (e.target.classList.contains("modal")) {
+      // don’t close if uploading, make user explicitly cancel
       if (!uploading) {
         setShowModal(false);
       }
@@ -39,14 +39,14 @@ export function UploadModal(props) {
   return (
     <div className="modal" onClick={handleOuterClick}>
       <div className="modal-content">
-        {/* Back button (only when not uploading) */}
+        {/* Back button only when NOT uploading */}
         {step > 1 && !uploading && (
           <button className="back-btn" onClick={() => setStep(1)}>
             ←
           </button>
         )}
 
-        {/* Close button (disabled while uploading) */}
+        {/* Close button disabled while uploading (use Cancel instead) */}
         <span
           className="close-btn"
           onClick={() => {
@@ -56,7 +56,6 @@ export function UploadModal(props) {
           ×
         </span>
 
-        {/* STEP 1: pick file */}
         {step === 1 && (
           <div className="step">
             <h2>Upload Video</h2>
@@ -77,7 +76,6 @@ export function UploadModal(props) {
           </div>
         )}
 
-        {/* STEP 2: video details */}
         {step === 2 && (
           <div className="step">
             <h2>Video Details</h2>
@@ -143,27 +141,29 @@ export function UploadModal(props) {
                 />
               )}
 
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={!canUpload || uploading}
-              >
-                {uploading ? "Uploading…" : "Upload"}
-              </button>
+              {/* Buttons / uploading state */}
+              {!uploading && (
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={!canUpload}
+                >
+                  Upload
+                </button>
+              )}
 
-              {/* Simple cancel area while uploading */}
               {uploading && (
-                <div style={{ marginTop: "12px" }}>
-                  <p style={{ fontSize: "14px", marginBottom: "8px" }}>
-                    Uploading… please wait.
-                  </p>
+                <div style={{ marginTop: "12px", display: "flex", gap: "12px", alignItems: "center" }}>
                   <button
                     type="button"
-                    className="btn btn-ghost"
+                    className="btn btn-secondary"
                     onClick={onCancelUpload}
                   >
                     Cancel upload
                   </button>
+                  <span style={{ fontSize: "14px", opacity: 0.8 }}>
+                    Uploading… please wait
+                  </span>
                 </div>
               )}
             </form>
@@ -173,3 +173,4 @@ export function UploadModal(props) {
     </div>
   );
 }
+
