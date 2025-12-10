@@ -1,9 +1,10 @@
+// src/App.jsx
 import React, {
   useEffect,
   useMemo,
   useRef,
   useState,
-  useCallback
+  useCallback,
 } from "react";
 import { useAuth } from "./context/AuthContext";
 import { Topbar } from "./components/Topbar";
@@ -32,7 +33,7 @@ import {
   uploadVideo,
   subscribeToVideos,
   incrementVideoViews,
-  getUserProfile
+  getUserProfile,
 } from "./lib/supabase";
 import "./styles.css";
 
@@ -71,7 +72,10 @@ export default function App() {
   const [showLocation, setShowLocation] = useState(false);
   const [locationText, setLocationText] = useState("");
   const fileInputRef = useRef(null);
-  const [uploading, setUploading] = useState(false); // 🔹 simple upload state
+
+  // real "upload in progress" flag + cancel flag
+  const [uploading, setUploading] = useState(false);
+  const uploadCancelledRef = useRef(false);
 
   /* ===== INLINE VIDEO PLAYER STATE ===== */
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
@@ -182,7 +186,7 @@ export default function App() {
         location: v.location,
         userId: v.user_id,
         likes: v.likes || 0,
-        views: v.views || 0
+        views: v.views || 0,
       }));
 
       const formattedUsers = (users || []).map((u) => ({
@@ -192,7 +196,7 @@ export default function App() {
         avatar: u.avatar,
         bio: u.bio,
         follower_count: u.follower_count,
-        following_count: u.following_count
+        following_count: u.following_count,
       }));
 
       setSearchResults({ users: formattedUsers, videos: formattedVideos });
@@ -237,7 +241,7 @@ export default function App() {
           bio: userData.bio || "",
           followerCount: userData.follower_count || 0,
           followingCount: userData.following_count || 0,
-          raw: userData
+          raw: userData,
         };
         setExternalProfile(mapped);
         setViewProfileId(userId);
@@ -382,7 +386,7 @@ export default function App() {
             profile &&
             profile.id &&
             (!viewProfileId || profile.id === viewProfileId)
-          )
+          ),
         }
       : null;
 
@@ -452,7 +456,7 @@ export default function App() {
           onUsernameClick={handleUserClick}
           onVideoClick={openInlinePlayer}
         />
-      )
+      ),
     };
   }, [
     uploads,
@@ -461,7 +465,7 @@ export default function App() {
     profile,
     viewProfileId,
     externalProfile,
-    handleProfileBack
+    handleProfileBack,
   ]);
 
   /* ===== FILE PICKER ===== */
@@ -512,7 +516,7 @@ export default function App() {
             avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
             bio: userData.bio || "",
             followerCount: userData.follower_count || 0,
-            followingCount: userData.following_count || 0
+            followingCount: userData.following_count || 0,
           });
           await loadInitialData(userData.id);
         }
@@ -539,7 +543,7 @@ export default function App() {
       const [videosData, likesData, followsData] = await Promise.all([
         getVideosWithUserData(),
         getUserLikes(userId),
-        getUserFollows(userId)
+        getUserFollows(userId),
       ]);
 
       const formattedVideos = videosData.map((video) => ({
@@ -556,7 +560,7 @@ export default function App() {
         userId: video.user_id,
         likes: video.likes,
         views: video.views,
-        user: video.users
+        user: video.users,
       }));
 
       setUploads(formattedVideos);
@@ -596,7 +600,7 @@ export default function App() {
           userId: newVideo.user_id,
           likes: newVideo.likes || 0,
           views: newVideo.views || 0,
-          user: userData
+          user: userData,
         };
 
         setUploads((prev) => {
@@ -614,7 +618,7 @@ export default function App() {
               return {
                 ...v,
                 likes: payload.new.likes,
-                views: payload.new.views
+                views: payload.new.views,
               };
             }
             return v;
@@ -636,7 +640,7 @@ export default function App() {
       avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
       bio: userData.bio || "",
       followerCount: userData.follower_count || 0,
-      followingCount: userData.following_count || 0
+      followingCount: userData.following_count || 0,
     });
     await loadInitialData(userData.id);
   };
@@ -650,13 +654,33 @@ export default function App() {
       avatar: userData.avatar || "https://i.pravatar.cc/50?img=3",
       bio: userData.bio || "",
       followerCount: userData.follower_count || 0,
-      followingCount: userData.following_count || 0
+      followingCount: userData.following_count || 0,
     });
     await loadInitialData(userData.id);
   };
 
   /* ===== UPLOAD ===== */
   const canUpload = title.trim() && desc.trim();
+
+  const resetUploadForm = () => {
+    setStep(1);
+    setVideoMeta(null);
+    setTitle("");
+    setDesc("");
+    setShowAffiliate(false);
+    setAffiliateLink("");
+    setShowLocation(false);
+    setLocationText("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCancelUpload = () => {
+    // Cancel from UI side
+    uploadCancelledRef.current = true;
+    setUploading(false);
+    setShowModal(false);
+    // keep videoMeta so user can reopen and try again if they want
+  };
 
   const submitUpload = async (e) => {
     e.preventDefault();
@@ -665,11 +689,9 @@ export default function App() {
       return;
     }
 
-    const uploadButton = e.target.querySelector('button[type="submit"]');
-    if (uploadButton) {
-      uploadButton.disabled = true;
-      uploadButton.textContent = "Uploading...";
-    }
+    if (uploading) return; // avoid double clicks
+
+    uploadCancelledRef.current = false;
     setUploading(true);
 
     try {
@@ -680,10 +702,16 @@ export default function App() {
         hasAffiliate: !!showAffiliate,
         affiliateLink: showAffiliate ? affiliateLink.trim() : null,
         hasLocation: !!showLocation,
-        location: showLocation ? locationText.trim() : null
+        location: showLocation ? locationText.trim() : null,
       };
 
       const video = await uploadVideo(profile.id, videoMeta.file, metadata);
+
+      // If user clicked "Cancel upload" while request was running,
+      // do NOT update UI with this video.
+      if (uploadCancelledRef.current) {
+        return;
+      }
 
       const record = {
         id: video.id,
@@ -699,34 +727,29 @@ export default function App() {
         userId: video.user_id,
         user: video.user,
         likes: video.likes || 0,
-        views: video.views || 0
+        views: video.views || 0,
       };
 
       setUploads((prev) => [record, ...prev]);
       setShowModal(false);
-      setStep(1);
-      setVideoMeta(null);
-      setTitle("");
-      setDesc("");
-      setShowAffiliate(false);
-      setAffiliateLink("");
-      setShowLocation(false);
-      setLocationText("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      URL.revokeObjectURL(videoMeta.url);
+      resetUploadForm();
+      if (videoMeta?.url) {
+        URL.revokeObjectURL(videoMeta.url);
+      }
       setActivePage("videos");
     } catch (error) {
-      console.error("Upload error:", error);
-      alert(error.message || "Failed to upload video. Please try again.");
-      if (uploadButton) {
-        uploadButton.disabled = false;
-        uploadButton.textContent = "Upload";
+      if (!uploadCancelledRef.current) {
+        console.error("Upload error:", error);
+        alert(error.message || "Failed to upload video. Please try again.");
       }
     } finally {
-      setUploading(false);
+      if (!uploadCancelledRef.current) {
+        setUploading(false);
+      }
     }
   };
 
+  /* ===== RENDER ===== */
   if (authLoading) {
     return (
       <div
@@ -735,10 +758,10 @@ export default function App() {
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          height: "100vh"
+          height: "100vh",
         }}
       >
-        <div className="loading-spinner" />
+        <div className="loading-spinner"></div>
         <p>Loading...</p>
       </div>
     );
@@ -789,7 +812,7 @@ export default function App() {
         <div className="loaded-page">
           {videosLoading ? (
             <div className="loading-container">
-              <div className="loading-spinner" />
+              <div className="loading-spinner"></div>
               <p>Loading videos...</p>
             </div>
           ) : (
@@ -849,9 +872,11 @@ export default function App() {
           canUpload={canUpload}
           submitUpload={submitUpload}
           uploading={uploading}
+          onCancelUpload={handleCancelUpload}
         />
       )}
     </div>
   );
 }
+
 
