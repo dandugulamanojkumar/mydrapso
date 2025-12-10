@@ -54,7 +54,7 @@ export default function App() {
   // full data for external profile fetched from DB
   const [externalProfile, setExternalProfile] = useState(null);
 
-  /* ===== UPLOAD STATE ===== */
+   /* ===== UPLOAD STATE ===== */
   const [showModal, setShowModal] = useState(false);
   const [step, setStep] = useState(1);
   const [videoMeta, setVideoMeta] = useState(null);
@@ -66,14 +66,35 @@ export default function App() {
   const [locationText, setLocationText] = useState("");
   const fileInputRef = useRef(null);
 
-  // NEW: upload progress state
+  // 🔹 upload progress state
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadBytesSent, setUploadBytesSent] = useState(0);
-  const [uploadBytesTotal, setUploadBytesTotal] = useState(0);
-  const [uploadEtaSeconds, setUploadEtaSeconds] = useState(null);
-  const uploadProgressTimerRef = useRef(null);
+  const [uploadProgress, setUploadProgress] = useState(0); // 0–100
+  const [uploadBytes, setUploadBytes] = useState({ uploaded: 0, total: 0 });
+  const [uploadEta, setUploadEta] = useState(null);
+  const uploadProgressIntervalRef = useRef(null);
+  const uploadStartTimeRef = useRef(null);
   const uploadCancelledRef = useRef(false);
+  //  cancel handler for upload
+   const handleCancelUpload = () => {
+    if (!uploading) return;
+
+    uploadCancelledRef.current = true;
+
+    if (uploadProgressIntervalRef.current) {
+      clearInterval(uploadProgressIntervalRef.current);
+      uploadProgressIntervalRef.current = null;
+    }
+
+    setUploading(false);
+    setUploadProgress(0);
+    setUploadEta(null);
+    setUploadBytes((prev) => ({ uploaded: 0, total: prev.total }));
+
+    alert(
+      "Upload cancelled in the UI.\nNote: the file upload request may still finish on the server unless uploadVideo supports AbortController."
+    );
+  };
+ 
 
   /* ===== INLINE VIDEO PLAYER STATE ===== */
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
