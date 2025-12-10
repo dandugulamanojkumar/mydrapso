@@ -1,5 +1,10 @@
-// src/App.jsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback
+} from "react";
 import { useAuth } from "./context/AuthContext";
 import { Topbar } from "./components/Topbar";
 import { Sidebar } from "./components/Sidebar";
@@ -66,6 +71,7 @@ export default function App() {
   const [showLocation, setShowLocation] = useState(false);
   const [locationText, setLocationText] = useState("");
   const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false); // 🔹 simple upload state
 
   /* ===== INLINE VIDEO PLAYER STATE ===== */
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
@@ -418,8 +424,8 @@ export default function App() {
       ),
       profile: (
         <PageProfile
-          profile={profileWithFlag}        // profile being viewed (me or other)
-          currentUser={profile}            // logged-in user
+          profile={profileWithFlag} // profile being viewed (me or other)
+          currentUser={profile} // logged-in user
           setProfile={setProfile}
           uploads={uploads}
           setUploads={setUploads}
@@ -462,7 +468,6 @@ export default function App() {
   const onPickFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const tempUrl = URL.createObjectURL(file);
     const v = document.createElement("video");
     v.preload = "metadata";
@@ -665,6 +670,7 @@ export default function App() {
       uploadButton.disabled = true;
       uploadButton.textContent = "Uploading...";
     }
+    setUploading(true);
 
     try {
       const metadata = {
@@ -716,6 +722,8 @@ export default function App() {
         uploadButton.disabled = false;
         uploadButton.textContent = "Upload";
       }
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -730,7 +738,7 @@ export default function App() {
           height: "100vh"
         }}
       >
-        <div className="loading-spinner"></div>
+        <div className="loading-spinner" />
         <p>Loading...</p>
       </div>
     );
@@ -762,7 +770,6 @@ export default function App() {
           setShowModal(true);
           setStep(1);
         }}
-        // these two props are optional; your Topbar may ignore them
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         onSearch={handleSearch}
@@ -782,7 +789,7 @@ export default function App() {
         <div className="loaded-page">
           {videosLoading ? (
             <div className="loading-container">
-              <div className="loading-spinner"></div>
+              <div className="loading-spinner" />
               <p>Loading videos...</p>
             </div>
           ) : (
@@ -815,7 +822,6 @@ export default function App() {
           onClose={handleCloseSearchResults}
           currentUser={profile}
           follows={followingList}
-          // use lightweight handler here (no extra Supabase)
           toggleFollow={handleSearchFollowToggle}
         />
       )}
@@ -842,8 +848,10 @@ export default function App() {
           setLocationText={setLocationText}
           canUpload={canUpload}
           submitUpload={submitUpload}
+          uploading={uploading}
         />
       )}
     </div>
   );
 }
+
