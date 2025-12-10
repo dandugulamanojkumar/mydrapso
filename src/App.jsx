@@ -467,13 +467,20 @@ export default function App() {
   ]);
 
   /* ===== FILE PICKER ===== */
-  const onPickFile = (e) => {
+    const onPickFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // set total bytes for progress
+    setUploadBytes({ uploaded: 0, total: file.size });
+    setUploadProgress(0);
+    setUploadEta(null);
+
     const tempUrl = URL.createObjectURL(file);
     const v = document.createElement("video");
     v.preload = "metadata";
     v.src = tempUrl;
+
     v.onloadedmetadata = () => {
       const duration = v.duration;
       if (!isFinite(duration) || duration < 5 || duration > 180) {
@@ -484,12 +491,14 @@ export default function App() {
       }
       setVideoMeta({ file, url: tempUrl, duration });
     };
+
     v.onerror = () => {
       alert("Unable to read this video.");
       URL.revokeObjectURL(tempUrl);
       setVideoMeta(null);
     };
   };
+
 
   /* ===== AUTH HANDLERS ===== */
   useEffect(() => {
