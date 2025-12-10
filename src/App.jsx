@@ -71,17 +71,23 @@ export default function App() {
   const [locationText, setLocationText] = useState("");
   const fileInputRef = useRef(null);
 
-  // upload state (no fake progress, just “uploading” + cancel flag)
+  // uploading state + cancel flag
   const [uploading, setUploading] = useState(false);
   const uploadCancelledRef = useRef(false);
 
-  /* ===== INLINE VIDEO PLAYER ===== */
+  // toast message after success
+  const [uploadMessage, setUploadMessage] = useState("");
+
+  /* ===== INLINE VIDEO PLAYER STATE ===== */
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(null);
 
   /* ===== SEARCH STATE ===== */
   const [showSearchResults, setShowSearchResults] = useState(false);
-  const [searchResults, setSearchResults] = useState({ users: [], videos: [] });
+  const [searchResults, setSearchResults] = useState({
+    users: [],
+    videos: [],
+  });
   const [searchQuery, setSearchQuery] = useState("");
 
   /* ===== THEME PERSISTENCE ===== */
@@ -90,7 +96,7 @@ export default function App() {
     localStorage.setItem("theme", theme);
   }, [theme]);
 
-  /* ===== LOGOUT ===== */
+  /* ===== LOGOUT FUNCTION ===== */
   const handleLogout = async () => {
     await supabase.auth.signOut();
     localStorage.removeItem("userData");
@@ -105,7 +111,7 @@ export default function App() {
     setPreviousPage("home");
   };
 
-  /* ===== INLINE VIDEO PLAYER ===== */
+  /* ===== INLINE VIDEO PLAYER FUNCTIONS ===== */
   const openInlinePlayer = async (videoId) => {
     const video = uploads.find((v) => v.id === videoId);
     if (video) {
@@ -129,16 +135,17 @@ export default function App() {
     setSelectedVideo(null);
   };
 
-  /* ===== SIDEBAR NAV (fix profile bug) ===== */
+  /* ===== SIDEBAR PAGE SWITCH (fix my profile bug) ===== */
   const handleSetActivePage = useCallback((page) => {
     if (page === "profile") {
+      // When user clicks "Profile" in sidebar, ALWAYS show own profile
       setViewProfileId(null);
       setExternalProfile(null);
     }
     setActivePage(page);
   }, []);
 
-  /* ===== SEARCH (Supabase) ===== */
+  /* ===== SEARCH FUNCTION (Supabase) ===== */
   const handleSearch = async (query) => {
     if (!query || !query.trim()) return;
 
@@ -146,6 +153,7 @@ export default function App() {
     setSearchQuery(q);
 
     try {
+      // Search users
       const { data: users, error: userError } = await supabase
         .from("users")
         .select(
@@ -158,6 +166,7 @@ export default function App() {
         console.error("User search error:", userError);
       }
 
+      // Search videos
       const { data: videos, error: videoError } = await supabase
         .from("videos")
         .select(
@@ -203,13 +212,15 @@ export default function App() {
     }
   };
 
-  /* ===== PROFILE CLICK ===== */
+  // handle user click — fetch profile from DB and open profile page
   const handleUserClick = async (userId) => {
     if (!userId) return;
 
+    // remember previous page so Back button can return
     setPreviousPage(activePage);
 
     try {
+      // if it's me, just open my profile and reset external view
       if (userId === profile?.id) {
         setViewProfileId(null);
         setExternalProfile(null);
@@ -265,7 +276,6 @@ export default function App() {
     setSearchResults({ users: [], videos: [] });
   };
 
-  /* ===== LIKE / FOLLOW ===== */
   const toggleLike = async (videoId) => {
     if (!profile) return;
 
@@ -296,6 +306,7 @@ export default function App() {
     }
   };
 
+  // Heavy follow/unfollow (Supabase) used in feeds / shorts / inline player
   const toggleFollow = async (userId) => {
     if (!profile || userId === profile.id) return;
 
@@ -339,6 +350,7 @@ export default function App() {
     }
   };
 
+  // lightweight follow toggle ONLY for SearchResults (no extra Supabase here)
   const handleSearchFollowToggle = (userId, isNowFollowing) => {
     setFollowingList((prev) => {
       if (isNowFollowing) {
@@ -360,8 +372,9 @@ export default function App() {
     });
   };
 
-  /* ===== BACK FROM OTHER PROFILE ===== */
+  /* ===== BACK FROM OTHER USER PROFILE ===== */
   const handleProfileBack = useCallback(() => {
+    // Clear external profile and go back to previous page
     setViewProfileId(null);
     setExternalProfile(null);
     setActivePage(previousPage || "home");
@@ -419,8 +432,8 @@ export default function App() {
       ),
       profile: (
         <PageProfile
-          profile={profileWithFlag}
-          currentUser={profile}
+          profile={profileWithFlag} // profile being viewed (me or other)
+          currentUser={profile} // logged-in user
           setProfile={setProfile}
           uploads={uploads}
           setUploads={setUploads}
@@ -487,7 +500,7 @@ export default function App() {
     };
   };
 
-  /* ===== AUTH ===== */
+  /* ===== AUTH HANDLERS ===== */
   useEffect(() => {
     if (authLoading) return;
 
@@ -651,20 +664,21 @@ export default function App() {
     await loadInitialData(userData.id);
   };
 
-  /* ===== UPLOAD SUBMIT + CANCEL ===== */
+  /* ===== UPLOAD ===== */
   const canUpload = title.trim() && desc.trim();
 
   const handleCancelUpload = () => {
-    // cancel UI upload and reset fields
+    // mark as cancelled so submitUpload ignores the result
     uploadCancelledRef.current = true;
-    setUploading(false);
-    setShowModal(false);
-    setStep(1);
 
+    // clean up temporary video URL
     if (videoMeta?.url) {
       URL.revokeObjectURL(videoMeta.url);
     }
 
+    setUploading(false);
+    setShowModal(false);
+    setStep(1);
     setVideoMeta(null);
     setTitle("");
     setDesc("");
@@ -681,6 +695,7 @@ export default function App() {
       alert("Please select a valid video first.");
       return;
     }
+    if (uploading) return;
 
     const uploadButton = e.target.querySelector('button[type="submit"]');
     if (uploadButton) {
@@ -704,7 +719,7 @@ export default function App() {
 
       const video = await uploadVideo(profile.id, videoMeta.file, metadata);
 
-      // if user cancelled while waiting, do nothing
+      // if user cancelled while request was in-flight, just stop here
       if (uploadCancelledRef.current) {
         return;
       }
@@ -727,8 +742,13 @@ export default function App() {
       };
 
       setUploads((prev) => [record, ...prev]);
+
+      // clean up and close modal
       setShowModal(false);
       setStep(1);
+      if (videoMeta.url) {
+        URL.revokeObjectURL(videoMeta.url);
+      }
       setVideoMeta(null);
       setTitle("");
       setDesc("");
@@ -737,8 +757,13 @@ export default function App() {
       setShowLocation(false);
       setLocationText("");
       if (fileInputRef.current) fileInputRef.current.value = "";
-      if (videoMeta?.url) URL.revokeObjectURL(videoMeta.url);
       setActivePage("videos");
+
+      // show success toast
+      setUploadMessage("Video uploaded successfully");
+      setTimeout(() => {
+        setUploadMessage("");
+      }, 3000);
     } catch (error) {
       if (!uploadCancelledRef.current) {
         console.error("Upload error:", error);
@@ -750,12 +775,10 @@ export default function App() {
         uploadButton.disabled = false;
         uploadButton.textContent = "Upload";
       }
-      // reset the cancel flag for next time
       uploadCancelledRef.current = false;
     }
   };
 
-  /* ===== RENDER ===== */
   if (authLoading) {
     return (
       <div
@@ -881,9 +904,17 @@ export default function App() {
           onCancelUpload={handleCancelUpload}
         />
       )}
+
+      {/* ✅ Success toast */}
+      {uploadMessage && (
+        <div className="upload-toast">
+          {uploadMessage}
+        </div>
+      )}
     </div>
   );
 }
+
 
 
 
