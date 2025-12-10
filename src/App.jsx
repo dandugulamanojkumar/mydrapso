@@ -54,7 +54,7 @@ export default function App() {
   // full data for external profile fetched from DB
   const [externalProfile, setExternalProfile] = useState(null);
 
-   /* ===== UPLOAD STATE ===== */
+  /* ===== UPLOAD STATE (VIDEO + FORM) ===== */
   const [showModal, setShowModal] = useState(false);
   const [step, setStep] = useState(1);
   const [videoMeta, setVideoMeta] = useState(null);
@@ -66,35 +66,15 @@ export default function App() {
   const [locationText, setLocationText] = useState("");
   const fileInputRef = useRef(null);
 
-  // 🔹 upload progress state
+  /* ===== UPLOAD PROGRESS STATE ===== */
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0); // 0–100
-  const [uploadBytes, setUploadBytes] = useState({ uploaded: 0, total: 0 });
-  const [uploadEta, setUploadEta] = useState(null);
-  const uploadProgressIntervalRef = useRef(null);
-  const uploadStartTimeRef = useRef(null);
+  const [uploadBytesSent, setUploadBytesSent] = useState(0);
+  const [uploadBytesTotal, setUploadBytesTotal] = useState(0);
+  const [uploadEtaSeconds, setUploadEtaSeconds] = useState(null);
+
+  const uploadProgressTimerRef = useRef(null);
   const uploadCancelledRef = useRef(false);
-  //  cancel handler for upload
-   const handleCancelUpload = () => {
-    if (!uploading) return;
-
-    uploadCancelledRef.current = true;
-
-    if (uploadProgressIntervalRef.current) {
-      clearInterval(uploadProgressIntervalRef.current);
-      uploadProgressIntervalRef.current = null;
-    }
-
-    setUploading(false);
-    setUploadProgress(0);
-    setUploadEta(null);
-    setUploadBytes((prev) => ({ uploaded: 0, total: prev.total }));
-
-    alert(
-      "Upload cancelled in the UI.\nNote: the file upload request may still finish on the server unless uploadVideo supports AbortController."
-    );
-  };
- 
 
   /* ===== INLINE VIDEO PLAYER STATE ===== */
   const [showInlinePlayer, setShowInlinePlayer] = useState(false);
@@ -488,14 +468,15 @@ export default function App() {
   ]);
 
   /* ===== FILE PICKER ===== */
-    const onPickFile = (e) => {
+  const onPickFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     // set total bytes for progress
-    setUploadBytes({ uploaded: 0, total: file.size });
+    setUploadBytesTotal(file.size);
+    setUploadBytesSent(0);
     setUploadProgress(0);
-    setUploadEta(null);
+    setUploadEtaSeconds(null);
 
     const tempUrl = URL.createObjectURL(file);
     const v = document.createElement("video");
@@ -519,7 +500,6 @@ export default function App() {
       setVideoMeta(null);
     };
   };
-
 
   /* ===== AUTH HANDLERS ===== */
   useEffect(() => {
@@ -964,6 +944,7 @@ export default function App() {
     </div>
   );
 }
+
 
 
 
