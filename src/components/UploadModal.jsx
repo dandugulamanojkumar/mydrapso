@@ -7,35 +7,60 @@ export function UploadModal(props) {
     showAffiliate, setShowAffiliate, affiliateLink, setAffiliateLink,
     showLocation, setShowLocation, locationText, setLocationText,
     canUpload, submitUpload,
-
-    // NEW props for progress UI
+    // 🔹 NEW props for progress
     uploading,
     uploadProgress,
-    uploadBytesSent,
-    uploadBytesTotal,
-    uploadEtaSeconds,
+    uploadBytes,
+    uploadEta,
     onCancelUpload,
   } = props;
 
-  const formatMb = (bytes) => ((bytes || 0) / (1024 * 1024)).toFixed(2);
+  const handleOuterClick = (e) => {
+    if (e.target.classList.contains('modal')) {
+      if (!uploading) {
+        setShowModal(false);
+      }
+    }
+  };
 
-  const closeIfNotUploading = () => {
-    if (uploading) return;
-    setShowModal(false);
+  const formatBytes = (bytes) => {
+    if (!bytes || bytes <= 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1) {
+      return `${(bytes / 1024).toFixed(0)} KB`;
+    }
+    return `${mb.toFixed(1)} MB`;
+  };
+
+  const formatEta = (seconds) => {
+    if (seconds == null) return '';
+    const s = Math.max(Math.round(seconds), 1);
+    if (s < 60) return `${s}s left`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    if (m >= 60) {
+      const h = Math.floor(m / 60);
+      const rm = m % 60;
+      return `${h}h ${rm}m left`;
+    }
+    return `${m}m ${rem}s left`;
   };
 
   return (
-    <div
-      className="modal"
-      onClick={(e) =>
-        e.target.classList.contains("modal") && !uploading && setShowModal(false)
-      }
-    >
+    <div className="modal" onClick={handleOuterClick}>
       <div className="modal-content">
         {step > 1 && !uploading && (
           <button className="back-btn" onClick={() => setStep(1)}>←</button>
         )}
-        <span className="close-btn" onClick={closeIfNotUploading}>×</span>
+
+        <span
+          className="close-btn"
+          onClick={() => {
+            if (!uploading) setShowModal(false);
+          }}
+        >
+          ×
+        </span>
 
         {step === 1 && (
           <div className="step">
@@ -91,6 +116,7 @@ export function UploadModal(props) {
                 />
                 Add Affiliate Link
               </label>
+
               {showAffiliate && (
                 <input
                   type="text"
@@ -110,6 +136,7 @@ export function UploadModal(props) {
                 />
                 Add Location
               </label>
+
               {showLocation && (
                 <input
                   type="text"
@@ -125,37 +152,36 @@ export function UploadModal(props) {
                 className="btn btn-primary"
                 disabled={!canUpload || uploading}
               >
-                {uploading ? "Uploading..." : "Upload"}
+                {uploading ? 'Uploading…' : 'Upload'}
               </button>
 
-              {/* PROGRESS UI */}
+              {/* 🔹 Progress UI */}
               {uploading && (
                 <div className="upload-progress">
-                  <div className="progress-bar">
+                  <div className="upload-progress-bar">
                     <div
-                      className="progress-fill"
+                      className="upload-progress-bar-fill"
                       style={{ width: `${uploadProgress || 0}%` }}
                     />
                   </div>
-                  <p className="progress-text">
-                    {formatMb(uploadBytesSent)} MB /{" "}
-                    {formatMb(
-                      uploadBytesTotal || (videoMeta?.file?.size || 0)
-                    )}{" "}
-                    MB ({Math.round(uploadProgress || 0)}%)
-                  </p>
-                  {uploadEtaSeconds != null && (
-                    <p className="progress-eta">
-                      ~{uploadEtaSeconds}s remaining
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={onCancelUpload}
-                  >
-                    Cancel upload
-                  </button>
+
+                  <div className="upload-progress-stats">
+                    <span>
+                      {Math.round(uploadProgress || 0)}% •{' '}
+                      {formatBytes(uploadBytes?.uploaded)} /{' '}
+                      {formatBytes(uploadBytes?.total)}
+                    </span>
+
+                    <span>{formatEta(uploadEta)}</span>
+
+                    <button
+                      type="button"
+                      className="upload-cancel-btn"
+                      onClick={onCancelUpload}
+                    >
+                      Cancel upload
+                    </button>
+                  </div>
                 </div>
               )}
             </form>
@@ -165,4 +191,5 @@ export function UploadModal(props) {
     </div>
   );
 }
+
 
